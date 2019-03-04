@@ -11,8 +11,7 @@ MODULE_INFO("stream control module");
 MODULE_DESCRIPTION("This is a stream control module for network");
 
 struct net_device *dev;
-
-static char dev_name;
+static char d_name;
 module_param(dev_name,char,0660);
 
 static int __init init(void)
@@ -23,8 +22,8 @@ static int __init init(void)
 
     read_lock(&dev_base_lock);
     for_each_netdev(&init_net,dev){
-        if(devname==dev->name){
-            printk("Dev name is %s\n",dev->name);
+        if(strcmp(d_name,dev->name)==0){
+            printk(KERN_INFO "dev name is %s\n",dev->name);
         }
     }
     read_unlock(&dev_base_lock);
