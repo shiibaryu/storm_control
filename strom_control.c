@@ -46,8 +46,8 @@ int get_netdev_mesurement_result()
         return bum_flow;
 }
 
-int check_flow(int result){
-        if(result >= threshold){
+int check_flow(int flow){
+        if(flow >= threshold){
             dev_close(d_name);
             flag = 1;
         }
