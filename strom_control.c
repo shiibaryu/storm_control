@@ -26,7 +26,8 @@ module_param(threshold,int,0660);
     5. 2~4の繰り返し
 */
 
-int mesure_netdev(struct net_device *ndev,){
+int mesure_netdev(struct net_device *ndev,)
+{
 
     return ;
 }
@@ -46,7 +47,8 @@ int get_netdev_mesurement_result()
         return bum_flow;
 }
 
-int check_flow(int flow){
+int check_flow(int flow)
+{
         if(flow >= threshold){
             dev_close(d_name);
             flag = 1;
@@ -74,7 +76,8 @@ static int module_init(void)
         return 0;
 }
 
-static void module_exit(void){
+static void module_exit(void)
+{
         printk(KERN_INFO "See you!");
 }
 
