@@ -1,4 +1,4 @@
-# Linux_kernel_module_about_strom_controll
+# strom_controll
 
 "now developing" <br>
 This is a linux kernel module about storm controll. <br>
