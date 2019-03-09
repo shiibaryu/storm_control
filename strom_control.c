@@ -8,7 +8,7 @@
 #include <linux/ktime.h>
 #include <linux/if_packet.h>
 
-MODULE_LICENSE("Debian"):
+MODULE_LICENSE("Debian");
 MODULE_AUTHOR("siiba");
 MODULE_INFO("strom control module");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
@@ -72,17 +72,16 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         }
 
         if(strcmp(skb->dev->name,dev_name)==0){
-            switch (skb->pkt_type){
-
-            case PACKET_BROADCAST:
+            if(skb->pkt_type == PACKET_BROADCAST && traffic_type == "broadcast"){
                 if(b_flag = 1){
                     if(skb->tstamp.off_sec - block_b_time <= 1 ){
                         return NF_DROP;
                     }
                     else{
-                        b_flag = 0;
+                         b_flag = 0;
                     }
                 }
+
                 b_count += 1;
                 if(b_count == 1){
                     first_b_time = skb->tstamp.off_sec;
@@ -107,9 +106,9 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                 else{
                     return NF_ACCEPT;
                 }
-                break;
+            }
         
-            case PACKET_MULTICAST:
+            else if(skb->pkt_type == PACKET_MULTICAST && traffic_type == "multicast"){
                 if(m_flag == 1){
                     if(skb->tstamp.off_sec - block_m_time <= 1){
                         return NF_DROP;
@@ -118,6 +117,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         m_flag = 0;
                     }
                 }
+
                 m_count += 1;
                 if(m_count == 1){
                     first_m_time = skb->tstamp.off_sec;
@@ -139,27 +139,37 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_ACCEPT;
                     }
                 }
-                break;
-
-            default:
-                return NF_ACCEPT;
-                break;
             }
+            else{
+                return NF_ACCEPT;
+            }
+        }
+
         else{
             return NF_ACCEPT;
-        }
         }
 }
     
 static int init_module()
 {       
         int ret;
+        
         nf_ops_storm.hook = storm_hook;
-        nf_ops_storm.pf = PF_INET 
+        nf_ops_storm.pf = PF_INET;
         nf_ops_storm.hooknum = NF_IP_PRE_ROUTING;
         nf_ops_storm.priority = NF_IP_PRI_FIRST;                
 
         printk(KERN_INFO "Storm control module was inserted.");
+
+        if(traffic_type == "broadcast"){
+            printk(KERN_INFO "storm control for broadcast was set.");
+        }
+        else if(traffic_type == "multicast"){
+            printk(KERN_INFO "storm control for multicast was set.");
+        }
+        else{
+            printk(KERN_INFO "this traffic type isn't registered.")
+        }
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
         if(ret < 0){
