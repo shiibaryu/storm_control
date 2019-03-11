@@ -12,6 +12,7 @@
 #include <linux/ktime.h>
 #include <linux/if_packet.h>
 #include <linux/types.h>
+#include <linux/net_namespace.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -29,7 +30,12 @@ module_param(threshold,int,0660);
 static int *low_threshold;
 module_param(low_threshold,int,0660);
 
-const static struct nf_hook_ops nf_ops_storm;
+const static struct nf_hook_ops nf_ops_storm = {
+	.hook = storm_hook,
+        .pf = NFPROTO_IPV4,
+        .hooknum = NF_IP_PRE_ROUTING,
+        .priority = NF_IP_PRI_FIRST,                
+};
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
@@ -47,10 +53,10 @@ struct storm_control_dev{
 	ktime_t first_m_time; /*the time at when first multidcast packet arrived*/
 	ktime_t block_b_time; /*the time when broadcast packet blocking started*/
 	ktime_t block_m_time; /*the time when multicast packet blocking started*/
-	u16 traffic_type; /* user specified traffic type*/
+	u16 t_type; /* user specified traffic type*/
 };
 
-/*the function hooks by incoming packet*/
+/*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
         struct sk_buff *skb,
         const struct net_device *in,
@@ -60,16 +66,18 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         if(!skb){
             return NF_ACCEPT;
         }
-	
+	/*struct net *net;*/
 	struct strom_control_dev *sc_dev = malloc(sizeof(struct storm_control_dev));
 	if(sc_dev == NULL){
 		printk(KERN_DEBUG "Failed to memory allocation.\n");
 	}
 
-        
-        if(strcmp(skb->dev->name,dev_name)==0){
+	sc_dev->t_type = (TRAFFIC_TYPE_UNKNOWN_UNICAST | TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST);
+	sc_dev->dev = dev_get_by_name(dev_name);/*dev_get_by_name(net,dev_name);*/
+
+        if(skb->dev == sc_dev->dev){
             /* Broadcast processing */
-            if(skb->pkt_type == PACKET_BROADCAST && traffic_type == "broadcast"){
+            if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->t_type & traffic_type)){
                 if(b_flag = 1){
                     if(skb->tstamp.off_sec - block_b_time <= 1 ){
                         printk(KERN_INFO "Broadcast packet was dropped .\n");
@@ -172,22 +180,22 @@ static int init_module()
 {       
         int ret;
 
-
-        nf_ops_storm.hook = storm_hook;
-        nf_ops_storm.pf = PF_INET;
-        nf_ops_storm.hooknum = NF_IP_PRE_ROUTING;
-        nf_ops_storm.priority = NF_IP_PRI_FIRST;                
-
         printk(KERN_INFO "Storm control module was inserted.\n");
 
         if(traffic_type == "broadcast"){
-            printk(KERN_INFO "storm control for broadcast was set.\n");
+		traffic_type = TRAFFIC_TYPE_BROADCAST;
+            	printk(KERN_INFO "storm control for broadcast was set.\n");
         }
         else if(traffic_type == "multicast"){
-            printk(KERN_INFO "storm control for multicast was set.\n");
+	    	traffic_type = TRAFFIC_TYPE_MULTICAST;
+            	printk(KERN_INFO "storm control for multicast was set.\n");
         }
+	else if(traffic_type == "unknownunicast"){
+		traffic_type == TRAFFIC_TYPE_UNKNOWN_UNICAST;
+		printk(KERN_INFO "storm control for unknown_unicast was set.\n");
+	}
         else{
-            printk(KERN_DEBUG "this traffic type isn't registered.\n");
+            printk(KERN_DEBUG "this traffic type could not be registered.\n");
         }
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
