@@ -47,7 +47,7 @@ static struct nf_hook_ops nf_ops_storm;
 }*/
 
 /*the function hooks by incoming packet*/
-static unsigned storm_hook(const struct nf_hook_ops *ops,
+const static unsigned storm_hook(const struct nf_hook_ops *ops,
         struct sk_buff *skb,
         const struct net_device *in,
         const struct net_device *out,
