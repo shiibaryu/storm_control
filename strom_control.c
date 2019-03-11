@@ -29,17 +29,25 @@ module_param(threshold,int,0660);
 static int *low_threshold;
 module_param(low_threshold,int,0660);
 
+const static struct nf_hook_ops nf_ops_storm;
+
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 
-const static struct nf_hook_ops nf_ops_storm;
-
 struct storm_control_dev{
 	struct net_dev *dev;
-	int threshold;
-	int low_threshold;
-	u16 traffic_type;
+	int threshold; /* threshold to start blocking bum packet*/
+	int low_threshold; /* threshold to stop blocking specified packet*/
+	int b_count; /* the counter for broadcast*/
+	int m_conunt; /* the counter for multicast*/
+	int b_flag; /*the flag that represents whether broadcast blocking is on or not*/
+	int m_flag; /*the flag that represents whether multicast blocking is on or not*/
+	ktime_t first_b_time; /*the time at when first broadcast packet arrived*/
+	ktime_t first_m_time; /*the time at when first multidcast packet arrived*/
+	ktime_t block_b_time; /*the time when broadcast packet blocking started*/
+	ktime_t block_m_time; /*the time when multicast packet blocking started*/
+	u16 traffic_type; /* user specified traffic type*/
 };
 
 /*the function hooks by incoming packet*/
@@ -49,19 +57,15 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         const struct net_device *out,
         int (*okfn)(struct sk_buff*))
 {       
-        static int b_count=0; /* the counter for broadcast*/
-        static int m_conunt=0; /* the counter for multicast*/
-        static int b_flag = 0; /*the flag that represents whether broadcast blocking is on or not*/
-        static int m_flag = 0; /*the flag that represents whether multicast blocking is on or not*/
-        static ktime_t first_b_time; /*the time at when first broadcast packet arrived*/
-        static ktime_t first_m_time; /*the time at when first multidcast packet arrived*/
-        static ktime_t block_b_time; /*the time when broadcast packet blocking started*/
-        static ktime_t block_m_time; /*the time when multicast packet blocking started*/
-        struct net_device *n_dev;
-
         if(!skb){
             return NF_ACCEPT;
         }
+	
+	struct strom_control_dev *sc_dev = malloc(sizeof(struct storm_control_dev));
+	if(sc_dev == NULL){
+		printk(KERN_DEBUG "Failed to memory allocation.\n");
+	}
+
         
         if(strcmp(skb->dev->name,dev_name)==0){
             /* Broadcast processing */
