@@ -70,6 +70,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 	struct strom_control_dev *sc_dev = malloc(sizeof(struct storm_control_dev));
 	if(sc_dev == NULL){
 		printk(KERN_DEBUG "Failed to memory allocation.\n");
+		return -1;
 	}
 
 	sc_dev->t_type = (TRAFFIC_TYPE_UNKNOWN_UNICAST | TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST);
