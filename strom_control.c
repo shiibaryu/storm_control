@@ -13,6 +13,7 @@
 #include <linux/if_packet.h>
 #include <linux/types.h>
 #include <linux/net_namespace.h>
+#include <linux/slab.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -58,19 +59,18 @@ struct storm_control_dev{
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
-        struct sk_buff *skb,
+	struct sk_buff *skb,
         const struct net_device *in,
         const struct net_device *out,
         int (*okfn)(struct sk_buff*))
 {       
-        if(!skb){
+	if(!skb){
             return NF_ACCEPT;
         }
 	/*struct net *net;*/
-	struct strom_control_dev *sc_dev = malloc(sizeof(struct storm_control_dev));
-	if(sc_dev == NULL){
-		printk(KERN_DEBUG "Failed to memory allocation.\n");
-		return -1;
+	struct strom_control_dev *sc_dev = kmalloc(sizeof(struct storm_control_dev),GFP_KERNEL);
+	if(!sc_dev){
+		return -ENOMEM;
 	}
 
 	sc_dev->t_type = (TRAFFIC_TYPE_UNKNOWN_UNICAST | TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST);
@@ -209,9 +209,10 @@ static int init_module()
 
 static void exit_module()
 {
-    nf_unregister_net_hook(NULL,&nf_ops_storm);
+	nf_unregister_net_hook(NULL,&nf_ops_storm);
+	kfree(sc_dev);
 
-    printk(KERN_INFO "Storm control module was Removed.\n");
+    	printk(KERN_INFO "Storm control module was Removed.\n");
 }
 
 MODULE_LICENSE("Debian");
