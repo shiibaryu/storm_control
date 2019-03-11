@@ -1,3 +1,7 @@
+/* 
+ * Traffic storm control module for linux kernel
+ */
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -7,11 +11,7 @@
 #include <linux/skbuff.h>
 #include <linux/ktime.h>
 #include <linux/if_packet.h>
-
-MODULE_LICENSE("Debian");
-MODULE_AUTHOR("siiba");
-MODULE_INFO("strom control module");
-MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
+#include <linux/types.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -29,25 +29,21 @@ module_param(threshold,int,0660);
 static int *low_threshold;
 module_param(low_threshold,int,0660);
 
-static struct nf_hook_ops nf_ops_storm;
+#define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
+#define TRAFFIC_TYPE_BROADCAST          0x0002
+#define TRAFFIC_TYPE_MULTICAST          0x0004
 
-/* get the interface user specified */
-/*struct net_device *get_netdev()
-{
-    struct net_device *dev:
+const static struct nf_hook_ops nf_ops_storm;
 
-    read_lock(&dev_base_lock);
-    for_each_netdev(&init_net,dev){
-        if(strcmp(dev_name,dev->name)==0){
-            return dev;
-        }
-    }
-    read_unlock(&dev_base_lock);
-
-}*/
+struct storm_control_dev{
+	struct net_dev *dev;
+	int threshold;
+	int low_threshold;
+	u16 traffic_type;
+};
 
 /*the function hooks by incoming packet*/
-const static unsigned storm_hook(const struct nf_hook_ops *ops,
+static unsigned storm_hook(const struct nf_hook_ops *ops,
         struct sk_buff *skb,
         const struct net_device *in,
         const struct net_device *out,
@@ -66,7 +62,7 @@ const static unsigned storm_hook(const struct nf_hook_ops *ops,
         if(!skb){
             return NF_ACCEPT;
         }
-
+        
         if(strcmp(skb->dev->name,dev_name)==0){
             /* Broadcast processing */
             if(skb->pkt_type == PACKET_BROADCAST && traffic_type == "broadcast"){
@@ -76,7 +72,7 @@ const static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
                     else{
-                        
+
                         b_flag = 0;
                         printk(KERN_INFO "One second passed.");
                         printk(KERN_INFO "Broadcast blocking was unset.");
@@ -84,6 +80,7 @@ const static unsigned storm_hook(const struct nf_hook_ops *ops,
                 }
 
                 b_count += 1;
+
                 if(b_count == 1){
                     first_b_time = skb->tstamp.off_sec;
                     return NF_ACCEPT;
@@ -171,26 +168,27 @@ static int init_module()
 {       
         int ret;
 
+
         nf_ops_storm.hook = storm_hook;
         nf_ops_storm.pf = PF_INET;
         nf_ops_storm.hooknum = NF_IP_PRE_ROUTING;
         nf_ops_storm.priority = NF_IP_PRI_FIRST;                
 
-        printk(KERN_INFO "Storm control module was inserted.");
+        printk(KERN_INFO "Storm control module was inserted.\n");
 
         if(traffic_type == "broadcast"){
-            printk(KERN_INFO "storm control for broadcast was set.");
+            printk(KERN_INFO "storm control for broadcast was set.\n");
         }
         else if(traffic_type == "multicast"){
-            printk(KERN_INFO "storm control for multicast was set.");
+            printk(KERN_INFO "storm control for multicast was set.\n");
         }
         else{
-            printk(KERN_DEBUG "this traffic type isn't registered.");
+            printk(KERN_DEBUG "this traffic type isn't registered.\n");
         }
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
         if(ret < 0){
-                printk(KERN_DEBUG "this traffic type wasn't registered.");
+                printk(KERN_DEBUG "this traffic type wasn't registered.\n");
         }
 
         return 0;
@@ -200,5 +198,10 @@ static void exit_module()
 {
     nf_unregister_net_hook(NULL,&nf_ops_storm);
 
-    printk(KERN_INFO "Storm control module was Removed.");
+    printk(KERN_INFO "Storm control module was Removed.\n");
 }
+
+MODULE_LICENSE("Debian");
+MODULE_AUTHOR("siibaaaaaaaaaaaaaa");
+MODULE_INFO("strom control module");
+MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
