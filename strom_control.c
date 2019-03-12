@@ -146,7 +146,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             }
 
             /* Multicast processing */
-            /*else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev->t_type & traffic_type)){
+            else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev->t_type & traffic_type)){
                 if(sc_dev->b_flag->m_flag == true){
                     if(skb->tstamp.off_sec - sc_dev->p_time->block_m_time <= 1){
                         printk(KERN_INFO "Multicast packet was dropped .\n");
@@ -186,7 +186,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
                 }
             }
-	    else if (&& ( sc_dev->t_type & traffictype)) {
+	    /*else if (&& ( sc_dev->t_type & traffictype)) {
 		if(m_flag == true){
                     if(skb->tstamp.off_sec - block_m_time <= 1){
                         printk(KERN_INFO "Multicast packet was dropped .\n");
