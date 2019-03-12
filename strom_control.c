@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/net_namespace.h>
 #include <linux/slab.h>
+#include <linux/percpu.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -31,6 +32,45 @@ module_param(threshold,int,0660);
 static int *low_threshold;
 module_param(low_threshold,int,0660);
 
+#define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
+#define TRAFFIC_TYPE_BROADCAST          0x0002
+#define TRAFFIC_TYPE_MULTICAST          0x0004
+
+typedef enum { false = 0, true } bool_t;
+
+struct packet_counter{
+	int b_counter; /* the counter for broadcast*/
+	int m_counter; /* the counter for multicast*/
+	int uu_counter; /* the counter for unknown unicast*/
+};
+
+static DECLARE_PER_CPU(struct packet_counter,pc);
+
+struct block_flag{
+	bool_t b_flag; /*the flag that represents whether broadcast blocking is on or not*/
+	bool_t m_flag; /*the flag that represents whether multicast blocking is on or not*/
+	bool_t uu_flag; /*the flag that represents whether unknonw unicast blocking is on or not*/
+};
+
+struct packet_time{
+	ktime_t first_b_time; /*the time at when first broadcast packet arrived*/
+	ktime_t first_m_time; /*the time at when first multidcast packet arrived*/
+	ktime_t first_uu_time; /*the time at when first unknown_unicast packet arrived*/
+	ktime_t block_b_time; /*the time when broadcast packet blocking started*/
+	ktime_t block_m_time; /*the time when multicast packet blocking started*/
+	ktime_t block_uu_time; /*the time at when unknown unicast packet blocking started*/
+};
+
+struct storm_control_dev{
+	struct net_dev *dev;
+	struct packet_counter *p_counter;
+	struct block_flag *b_flag;
+	struct packet_time *p_time;
+	int threshold; /* threshold to start blocking bum packet*/
+	int low_threshold; /* threshold to stop blocking specified packet*/
+	u16 t_type; /* user specified traffic type*/
+};
+
 const static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
         .pf = NFPROTO_IPV4,
@@ -38,24 +78,6 @@ const static struct nf_hook_ops nf_ops_storm = {
         .priority = NF_IP_PRI_FIRST,                
 };
 
-#define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
-#define TRAFFIC_TYPE_BROADCAST          0x0002
-#define TRAFFIC_TYPE_MULTICAST          0x0004
-
-struct storm_control_dev{
-	struct net_dev *dev;
-	int threshold; /* threshold to start blocking bum packet*/
-	int low_threshold; /* threshold to stop blocking specified packet*/
-	int b_count; /* the counter for broadcast*/
-	int m_conunt; /* the counter for multicast*/
-	int b_flag; /*the flag that represents whether broadcast blocking is on or not*/
-	int m_flag; /*the flag that represents whether multicast blocking is on or not*/
-	ktime_t first_b_time; /*the time at when first broadcast packet arrived*/
-	ktime_t first_m_time; /*the time at when first multidcast packet arrived*/
-	ktime_t block_b_time; /*the time when broadcast packet blocking started*/
-	ktime_t block_m_time; /*the time when multicast packet blocking started*/
-	u16 t_type; /* user specified traffic type*/
-};
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
@@ -70,42 +92,41 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 	/*struct net *net;*/
 	struct strom_control_dev *sc_dev = kmalloc(sizeof(struct storm_control_dev),GFP_KERNEL);
 	if(!sc_dev){
+		kfree(sc_dev);
 		return -ENOMEM;
 	}
-
-	sc_dev->t_type = (TRAFFIC_TYPE_UNKNOWN_UNICAST | TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST);
+	sc_dev->t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
 	sc_dev->dev = dev_get_by_name(dev_name);/*dev_get_by_name(net,dev_name);*/
 
         if(skb->dev == sc_dev->dev){
-            /* Broadcast processing */
+	    /*Broadcast processing*/
             if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->t_type & traffic_type)){
-                if(b_flag = 1){
-                    if(skb->tstamp.off_sec - block_b_time <= 1 ){
+                if(sk_dev->b_flag->b_flag = true){
+                    if(skb->tstamp.off_sec - sc_dev->p_time->block_b_time <= 1 ){
                         printk(KERN_INFO "Broadcast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
-
-                        b_flag = 0;
+                        sc_dev->b_flag->b_flag = false;
                         printk(KERN_INFO "One second passed.");
                         printk(KERN_INFO "Broadcast blocking was unset.");
                     }
                 }
 
-                b_count += 1;
-
-                if(b_count == 1){
-                    first_b_time = skb->tstamp.off_sec;
+        	this_cpu_inc(pc.b_counter);
+                if(pc.b_counter == 1){
+                    sc_dev->p_time->first_b_time = skb->tstamp.off_sec;
                     return NF_ACCEPT;
                 }
-                else if(b_count < threshold){
+                else if(pc.b_counter < threshold){
                     return NF_ACCEPT;
                 }
-                else if(b_count >= threshold){
-                    if(skb->tstamp.off_sec - first_b_time <= 1){
-                        b_count = 0;
-                        b_flag = 1;
-                        block_b_time = skb->skb->tstamp.off_sec;
+                else if(pc.b_counter >= threshold){
+                    if(skb->tstamp.off_sec - sc_dev->p_time->first_b_time <= 1){
+			/*全CPUのカウンターの初期化が必要*/
+                        pc.b_counter = 0;
+                        sc_dev->b_flag->b_flag = true;
+                        sc_dev->p_time->block_b_time = skb->tstamp.off_sec;
 
                         printk(KERN_INFO "Broadcast pakcet per second became higher that the threthold.\n");
                         printk(KERN_INFO "--------Broadcast blocking started--------\n");
@@ -114,8 +135,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
                     else{
-                        b_count = 1;
-                        first_b_time = skb->tstamp.off_sec;
+                        pc.b_counter = 1;
+                        sc_dev->p_time->first_b_time = skb->tstamp.off_sec;
                         return NF_ACCEPT;
                     }
                 }
@@ -125,31 +146,71 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             }
 
             /* Multicast processing */
-            else if(skb->pkt_type == PACKET_MULTICAST && traffic_type == "multicast"){
-                if(m_flag == 1){
-                    if(skb->tstamp.off_sec - block_m_time <= 1){
+            /*else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev->t_type & traffic_type)){
+                if(sc_dev->b_flag->m_flag == true){
+                    if(skb->tstamp.off_sec - sc_dev->p_time->block_m_time <= 1){
                         printk(KERN_INFO "Multicast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
-                        m_flag = 0;
+                        sc_dev->b_flag->m_flag = false;
                         printk(KERN_INFO "One second passed.");
                         printk(KERN_INFO "Multicast blocking was unset.");
                     }
                 }
 
-                m_count += 1;
-                if(m_count == 1){
+                pc.m_counter += 1;
+                if(pc.m_counter == 1){
+                    sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
+                    return NF_ACCEPT;
+                }
+                else if(pc.m_counter < threshold){
+                    return NF_ACCEPT;
+                }
+                else if(pc.m_counter >= threshold){
+                    if(skb->tstamp.off_sec - sc_dev->p_time->first_m_time <= 1){
+                        pc.m_counter = 0;
+                        sc_dev->b_flag->m_flag = true;
+                        sc_dev->p_time->block_m_time = skb->tstamp.off_sec;
+
+                        printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
+                        printk(KERN_INFO "--------Multicast blocking started--------\n");
+                        printk(KERN_INFO "Multicast packet was dropped .\n");
+
+                        return NF_DROP;
+                    }
+                    else{
+                        sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
+                        pc.m_counter = 1;
+                        return NF_ACCEPT;
+                    }
+                }
+            }
+	    else if (&& ( sc_dev->t_type & traffictype)) {
+		if(m_flag == true){
+                    if(skb->tstamp.off_sec - block_m_time <= 1){
+                        printk(KERN_INFO "Multicast packet was dropped .\n");
+                        return NF_DROP;
+                    }
+                    else{
+                        m_flag = false;
+                        printk(KERN_INFO "One second passed.");
+                        printk(KERN_INFO "Multicast blocking was unset.");
+                    }
+                }
+
+                m_counter += 1;
+                if(m_counter == 1){
                     first_m_time = skb->tstamp.off_sec;
                     return NF_ACCEPT;
                 }
-                else if(m_count < threshold){
+                else if(m_counter < threshold){
                     return NF_ACCEPT;
                 }
-                else if(m_count >= threshold){
+                else if(m_counter >= threshold){
                     if(skb->tstamp.off_sec - first_m_time <= 1){
-                        m_count = 0;
-                        m_flag = 1;
+                        m_counter = 0;
+                        m_flag = true;
                         block_m_time = skb->tstamp.off_sec;
 
                         printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
@@ -160,12 +221,13 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
                     else{
                         first_m_time = skb->tstamp.off_sec;
-                        m_count = 1;
+                        m_counter = 1;
                         return NF_ACCEPT;
                     }
                 }
-            }
-
+		    
+	    }*/
+	    
             /* Any packets other that above can be passed */
             else{
                 return NF_ACCEPT;
@@ -209,8 +271,8 @@ static int init_module()
 
 static void exit_module()
 {
-	nf_unregister_net_hook(NULL,&nf_ops_storm);
 	kfree(sc_dev);
+	nf_unregister_net_hook(NULL,&nf_ops_storm);
 
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
