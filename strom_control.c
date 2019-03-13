@@ -15,6 +15,8 @@
 #include <linux/net_namespace.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
+#include <linux/smp.h>
+#include <linux/cpumask.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -44,8 +46,6 @@ struct packet_counter{
 	int uu_counter; /* the counter for unknown unicast*/
 };
 
-static DECLARE_PER_CPU(struct packet_counter,pc);
-
 struct block_flag{
 	bool_t b_flag; /*the flag that represents whether broadcast blocking is on or not*/
 	bool_t m_flag; /*the flag that represents whether multicast blocking is on or not*/
@@ -68,6 +68,9 @@ struct storm_control_dev{
 	struct packet_time *p_time;
 	int threshold; /* threshold to start blocking bum packet*/
 	int low_threshold; /* threshold to stop blocking specified packet*/
+	int pc_b_counter; /* per cpu bloadcast packet counter */
+	int pc_m_counter; /* per cpu multicast packet counter */
+	int pc__counter; /* per cpu multicast packet counter */
 	u16 t_type; /* user specified traffic type*/
 };
 
@@ -78,6 +81,7 @@ const static struct nf_hook_ops nf_ops_storm = {
         .priority = NF_IP_PRI_FIRST,                
 };
 
+DEFINE_PER_CPU(struct storm_control_dev,scd);
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
@@ -86,15 +90,19 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         const struct net_device *out,
         int (*okfn)(struct sk_buff*))
 {       
+	int cpu;
+
 	if(!skb){
             return NF_ACCEPT;
         }
+
 	/*struct net *net;*/
 	struct strom_control_dev *sc_dev = kmalloc(sizeof(struct storm_control_dev),GFP_KERNEL);
 	if(!sc_dev){
 		kfree(sc_dev);
 		return -ENOMEM;
 	}
+
 	sc_dev->t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
 	sc_dev->dev = dev_get_by_name(dev_name);/*dev_get_by_name(net,dev_name);*/
 
@@ -113,18 +121,27 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
                 }
 
-        	this_cpu_inc(pc.b_counter);
-                if(pc.b_counter == 1){
-                    sc_dev->p_time->first_b_time = skb->tstamp.off_sec;
-                    return NF_ACCEPT;
+		this_cpu_inc(scd.pc_b_counter);
+		
+		for_each_online_cpu(cpu){
+			sc_dev->p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
+		}
+
+                if(sc_dev->p_counter->b_counter == 1){
+			sc_dev->p_counter->b_counter = 0;
+                    	sc_dev->p_time->first_b_time = skb->tstamp.off_sec;
+                    	return NF_ACCEPT;
                 }
-                else if(pc.b_counter < threshold){
-                    return NF_ACCEPT;
+                else if(sc_dev->p_counter->b_counter < threshold){
+		    	sc_dev->p_counter->b_counter = 0;
+                    	return NF_ACCEPT;
                 }
-                else if(pc.b_counter >= threshold){
+                else if(sc_dev->p_counter->b_counter >= threshold){
                     if(skb->tstamp.off_sec - sc_dev->p_time->first_b_time <= 1){
-			/*全CPUのカウンターの初期化が必要*/
-                        pc.b_counter = 0;
+			for_each_online_cpu(cpu){
+				/*0にする*/
+			}
+                        sc_dev->p_counter->b_counter = 0;
                         sc_dev->b_flag->b_flag = true;
                         sc_dev->p_time->block_b_time = skb->tstamp.off_sec;
 
@@ -135,7 +152,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
                     else{
-                        pc.b_counter = 1;
+                        sc_dev->p_counter->b_counter = 1;
                         sc_dev->p_time->first_b_time = skb->tstamp.off_sec;
                         return NF_ACCEPT;
                     }
@@ -159,30 +176,36 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
                 }
 
-                pc.m_counter += 1;
-                if(pc.m_counter == 1){
-                    sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
-                    return NF_ACCEPT;
+		this_cpu_inc(scd.pc_m_counter);
+		
+		for_each_online_cpu(cpu){
+			sc_dev->p_counter->m_counter += per_cpu(scd.pc__counter,cpu);
+		}
+                if(sc_dev->p_counter->m_counter == 1){
+			sc_dev->p_counter->m_counter = 0;
+                    	sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
+                    	return NF_ACCEPT;
                 }
                 else if(pc.m_counter < threshold){
-                    return NF_ACCEPT;
+			sc_dev->p_counter->m_counter = 0;
+                    	return NF_ACCEPT;
                 }
                 else if(pc.m_counter >= threshold){
                     if(skb->tstamp.off_sec - sc_dev->p_time->first_m_time <= 1){
-                        pc.m_counter = 0;
-                        sc_dev->b_flag->m_flag = true;
-                        sc_dev->p_time->block_m_time = skb->tstamp.off_sec;
+				sc_dev->p_counter->m_counter = 0;
+                        	sc_dev->b_flag->m_flag = true;
+                        	sc_dev->p_time->block_m_time = skb->tstamp.off_sec;
 
-                        printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
-                        printk(KERN_INFO "--------Multicast blocking started--------\n");
-                        printk(KERN_INFO "Multicast packet was dropped .\n");
+                        	printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
+                        	printk(KERN_INFO "--------Multicast blocking started--------\n");
+                        	printk(KERN_INFO "Multicast packet was dropped .\n");
 
-                        return NF_DROP;
-                    }
+                        	return NF_DROP;
+                    	}
                     else{
-                        sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
-                        pc.m_counter = 1;
-                        return NF_ACCEPT;
+				sc_dev->p_counter->m_counter = 1
+                        	sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
+                        	return NF_ACCEPT;
                     }
                 }
             }
@@ -272,6 +295,7 @@ static int init_module()
 static void exit_module()
 {
 	kfree(sc_dev);
+	free_percpu(storm_counter);
 	nf_unregister_net_hook(NULL,&nf_ops_storm);
 
     	printk(KERN_INFO "Storm control module was Removed.\n");
