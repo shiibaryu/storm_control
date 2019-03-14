@@ -26,6 +26,12 @@ module_param(dev_name,charp,0660);
 static char *traffic_type;
 module_param(traffic_type,charp,0660);
 
+/* bps or pps*/
+/*
+static char *per_second;
+module_param(per_second,charp,0660);
+*/
+
 /* the threthhold that set the traffic limit*/
 static int *threshold;
 module_param(threshold,int,0660);
@@ -115,14 +121,34 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
                     else{
-                        sc_dev->b_flag->b_flag = false;
-                        printk(KERN_INFO "One second passed.");
-                        printk(KERN_INFO "Broadcast blocking was unset.");
+				this_cpu_inc(scd.pc_b_counter);
+				for_each_online_cpu(cpu){
+					sc_dev->p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
+				}
+				if(sc_dev->p_counter->b_counter <= low_threshold){
+					sc_dev->b_flag->b_flag = false;
+					sc_dev->p_counter->b_counter = 0;
+					for_each_online_cpu(cpu){
+						per_cpu(scd.pc_b_counter,cpu) = 0;
+					}
+                        		printk(KERN_INFO "One second passed.\n");
+                        		printk(KERN_INFO "Broadcast blocking was unset.\n");
+					return NF_DROP;
+				}
+				else{
+					sc_dev->p_counter->b_counter = 0;
+					for_each_online_cpu(cpu){
+						per_cpu(scd.pc_b_counter,cpu) = 0;
+					}
+
+					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
+					printk(KERN_INFO "One more minute are added.\n");
+					return NF_DROP;
+				}
                     }
                 }
 
 		this_cpu_inc(scd.pc_b_counter);
-		
 		for_each_online_cpu(cpu){
 			sc_dev->p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
 		}
@@ -139,7 +165,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                 else if(sc_dev->p_counter->b_counter >= threshold){
                     if(skb->tstamp.off_sec - sc_dev->p_time->first_b_time <= 1){
 			for_each_online_cpu(cpu){
-				/*0にする*/
+				per_cpu(scd.pc_b_counter,cpu) = 0;
 			}
                         sc_dev->p_counter->b_counter = 0;
                         sc_dev->b_flag->b_flag = true;
@@ -179,19 +205,22 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 		this_cpu_inc(scd.pc_m_counter);
 		
 		for_each_online_cpu(cpu){
-			sc_dev->p_counter->m_counter += per_cpu(scd.pc__counter,cpu);
+			sc_dev->p_counter->m_counter += per_cpu(scd.pc_m_counter,cpu);
 		}
                 if(sc_dev->p_counter->m_counter == 1){
 			sc_dev->p_counter->m_counter = 0;
                     	sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
                     	return NF_ACCEPT;
                 }
-                else if(pc.m_counter < threshold){
+                else if(sc_dev->p_counter->m_counter < threshold){
 			sc_dev->p_counter->m_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(pc.m_counter >= threshold){
-                    if(skb->tstamp.off_sec - sc_dev->p_time->first_m_time <= 1){
+                else if(sc_dev->p_counter->m_counter >= threshold){
+                	if(skb->tstamp.off_sec - sc_dev->p_time->first_m_time <= 1){
+				for_each_online_cpu(cpu){
+					per_cpu(scd.pc_m_counter,cpu) = 0;
+					}
 				sc_dev->p_counter->m_counter = 0;
                         	sc_dev->b_flag->m_flag = true;
                         	sc_dev->p_time->block_m_time = skb->tstamp.off_sec;
@@ -201,14 +230,15 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         	printk(KERN_INFO "Multicast packet was dropped .\n");
 
                         	return NF_DROP;
-                    	}
-                    else{
+                    		}
+                	else{
 				sc_dev->p_counter->m_counter = 1
                         	sc_dev->p_time->first_m_time = skb->tstamp.off_sec;
                         	return NF_ACCEPT;
-                    }
+                    	}
                 }
             }
+	    else if(skb->dev->dev_addr != sc_dev->dev->dev_addr)
 	    /*else if (&& ( sc_dev->t_type & traffictype)) {
 		if(m_flag == true){
                     if(skb->tstamp.off_sec - block_m_time <= 1){
