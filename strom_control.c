@@ -17,6 +17,7 @@
 #include <linux/percpu.h>
 #include <linux/smp.h>
 #include <linux/cpumask.h>
+#include <linux/route.h>
 
 /* the interface name a user can specify*/
 static char *dev_name;
@@ -76,7 +77,7 @@ struct storm_control_dev{
 	int low_threshold; /* threshold to stop blocking specified packet*/
 	int pc_b_counter; /* per cpu bloadcast packet counter */
 	int pc_m_counter; /* per cpu multicast packet counter */
-	int pc__counter; /* per cpu multicast packet counter */
+	int pc_uu_counter; /* per cpu unknown unicast packet counter */
 	u16 t_type; /* user specified traffic type*/
 };
 
@@ -88,6 +89,13 @@ const static struct nf_hook_ops nf_ops_storm = {
 };
 
 DEFINE_PER_CPU(struct storm_control_dev,scd);
+
+
+/*
+unknown unicast対応・ロック
+構造体の値、特にカウンター、フラグの保持
+bps対応
+*/
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
@@ -137,6 +145,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				}
 				else{
 					sc_dev->p_counter->b_counter = 0;
+					sc_dev->p_time->block_b_time = skb->tstamp.off_sec;
 					for_each_online_cpu(cpu){
 						per_cpu(scd.pc_b_counter,cpu) = 0;
 					}
@@ -238,7 +247,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     	}
                 }
             }
-	    else if(skb->dev->dev_addr != sc_dev->dev->dev_addr)
+	    else if( (ip_route_input(skb,,,,skb->dev))&& (sc_dev->t_type & traffic_type))
+	    /*else if(skb->dev->dev_addr != sc_dev->dev->dev_addr)*/
 	    /*else if (&& ( sc_dev->t_type & traffictype)) {
 		if(m_flag == true){
                     if(skb->tstamp.off_sec - block_m_time <= 1){
