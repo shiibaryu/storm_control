@@ -292,19 +292,19 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
     
 static int init_module()
 {       
-        int ret;
+        int ret = 0;
 
         printk(KERN_INFO "Storm control module was inserted.\n");
 
-        if(strcmp(traffic_type == "broadcast") == 0){
+        if(strcmp(traffic_type,"broadcast") == 0){
 		traffic_type = TRAFFIC_TYPE_BROADCAST;
             	printk(KERN_INFO "storm control for broadcast was set.\n");
         }
-        else if(strcmp(traffic_type == "multicast")==0){
+        else if(strcmp(traffic_type,"multicast")==0){
 	    	traffic_type = TRAFFIC_TYPE_MULTICAST;
             	printk(KERN_INFO "storm control for multicast was set.\n");
         }
-	else if(strcmp(traffic_type == "unknownunicast")==0){
+	else if(strcmp(traffic_type,"unknown_unicast")==0){
 		traffic_type == TRAFFIC_TYPE_UNKNOWN_UNICAST;
 		printk(KERN_INFO "storm control for unknown_unicast was set.\n");
 	}
@@ -315,8 +315,7 @@ static int init_module()
 	memset(&sc_dev,0,sizeof(sc_dev));
 
 	sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
-
-	sc_dev.dev = dev_get_by_name(net,d_name);/*dev_get_by_name(net,d_name);*/
+	sc_dev.dev = dev_get_by_name(&init_net,d_name);/*dev_get_by_name(net,d_name);*/
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
         if(ret < 0){
