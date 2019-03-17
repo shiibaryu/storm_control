@@ -28,14 +28,12 @@ static char *traffic_type;
 module_param(traffic_type,charp,0660);
 
 /* bps or pps*/
-/*
 static char *per_second;
 module_param(per_second,charp,0660);
-*/
 
 /* the threthhold that set the traffic limit*/
-/*static int *threshold;
-module_param(threshold,int,0660);*/
+static int *threshold;
+module_param(threshold,int,0660);
 
 /* the the threthold for low level limit*/
 static int *low_threshold;
@@ -79,12 +77,15 @@ struct storm_control_dev{
 	u16 t_type; /* user specified traffic type*/
 };
 
+static struct storm_control_dev sc_dev;
+
 const static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
         .pf = NFPROTO_IPV4,
         .hooknum = NF_IP_PRE_ROUTING,
         .priority = NF_IP_PRI_FIRST,                
 };
+
 
 DEFINE_PER_CPU(struct storm_control_dev,scd);
 
@@ -107,16 +108,6 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 	if(!skb){
             return NF_ACCEPT;
         }
-
-	/*struct net *net;*/
-	struct strom_control *sc_dev = kmalloc(sizeof(struct storm_control_dev),GFP_KERNEL);
-	if(!sc_dev){
-		kfree(sc_dev);
-		return -ENOMEM;
-	}
-
-	sc_dev->t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
-	sc_dev->dev = dev_get_by_name(net,d_name);/*dev_get_by_name(net,d_name);*/
 
         if(skb->dev == sc_dev->dev){
 	    /*Broadcast processing*/
@@ -320,6 +311,12 @@ static int init_module()
         else{
             printk(KERN_DEBUG "this traffic type could not be registered.\n");
         }
+
+	memset(&sc_dev,0,sizeof(sc_dev));
+
+	sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
+
+	sc_dev.dev = dev_get_by_name(net,d_name);/*dev_get_by_name(net,d_name);*/
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
         if(ret < 0){
