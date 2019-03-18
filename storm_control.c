@@ -97,7 +97,7 @@ int total_cpu_packet(struct storm_control_dev scd){
 	int cpu;
 	int total_packet;
 
-	this_cpu_inc(scd);
+	this_cpu_inc(scd.pc_b_counter);
 	for_each_online_cpu(cpu){
 		total_packet += per_cpu(scd.pc_b_counter,cpu);
 	}
