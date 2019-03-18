@@ -86,15 +86,24 @@ const static struct nf_hook_ops nf_ops_storm = {
         .priority = NF_IP_PRI_FIRST,                
 };
 
-
-DEFINE_PER_CPU(struct storm_control_dev,scd);
-
+static DEFINE_PER_CPU(struct storm_control_dev,scd);
 
 /*
-unknown unicast対応・ロック
-構造体の値、特にカウンター、フラグの保持
+Percpuの処理・ロック・unknown unicast対応・デバック
 bps対応
 */
+
+int total_cpu_packet(struct storm_control_dev scd){
+	int cpu;
+	int total_packet;
+
+	this_cpu_inc(scd);
+	for_each_online_cpu(cpu){
+		total_packet += per_cpu(scd.pc_b_counter,cpu);
+	}
+	return total_packet;
+}
+
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
@@ -109,22 +118,19 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             return NF_ACCEPT;
         }
 
-        if(skb->dev == sc_dev->dev){
+        if(skb->dev == sc_dev.dev){
 	    /*Broadcast processing*/
-            if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->t_type & traffic_type)){
-                if(sc_dev->b_flag->b_flag = 1){
-                    if(skb->tstamp - sc_dev->p_time->block_b_time <= 1 ){
+            if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & traffic_type)){
+                if(sc_dev.b_flag.b_flag = 1){
+                    if(skb->tstamp - sc_dev.p_time->block_b_time <= 1 ){
                         printk(KERN_INFO "Broadcast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
-				this_cpu_inc(scd.pc_b_counter);
-				for_each_online_cpu(cpu){
-					sc_dev->p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
-				}
-				if(sc_dev->p_counter->b_counter <= low_threshold){
-					sc_dev->b_flag->b_flag = 0;
-					sc_dev->p_counter->b_counter = 0;
+				sc_dev.p_counter->b_counter = total_cpu_packet(scd);
+				if(sc_dev.p_counter->b_counter <= low_threshold){
+					sc_dev.b_flag->b_flag = 0;
+					sc_dev.p_counter->b_counter = 0;
 					for_each_online_cpu(cpu){
 						per_cpu(scd.pc_b_counter,cpu) = 0;
 					}
@@ -133,8 +139,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 					return NF_DROP;
 				}
 				else{
-					sc_dev->p_counter->b_counter = 0;
-					sc_dev->p_time->block_b_time = skb->tstamp;
+					sc_dev.p_counter->b_counter = 0;
+					sc_dev.p_time->block_b_time = skb->tstamp;
 					for_each_online_cpu(cpu){
 						per_cpu(scd.pc_b_counter,cpu) = 0;
 					}
@@ -148,26 +154,26 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 
 		this_cpu_inc(scd.pc_b_counter);
 		for_each_online_cpu(cpu){
-			sc_dev->p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
+			sc_dev.p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
 		}
 
-                if(sc_dev->p_counter->b_counter == 1){
-			sc_dev->p_counter->b_counter = 0;
-                    	sc_dev->p_time->first_b_time = skb->tstamp;
+                if(sc_dev.p_counter->b_counter == 1){
+			sc_dev.p_counter->b_counter = 0;
+                    	sc_dev.p_time->first_b_time = skb->tstamp;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev->p_counter->b_counter < threshold){
-		    	sc_dev->p_counter->b_counter = 0;
+                else if(sc_dev.p_counter->b_counter < threshold){
+		    	sc_dev.p_counter->b_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev->p_counter->b_counter >= threshold){
-                    if(skb->tstamp - sc_dev->p_time->first_b_time <= 1){
+                else if(sc_dev.p_counter->b_counter >= threshold){
+                    if(skb->tstamp - sc_dev.p_time->first_b_time <= 1){
 			for_each_online_cpu(cpu){
 				per_cpu(scd.pc_b_counter,cpu) = 0;
 			}
-                        sc_dev->p_counter->b_counter = 0;
-                        sc_dev->b_flag->b_flag = 1;
-                        sc_dev->p_time->block_b_time = skb->tstamp;
+                        sc_dev.p_counter->b_counter = 0;
+                        sc_dev.b_flag->b_flag = 1;
+                        sc_dev.p_time->block_b_time = skb->tstamp;
 
                         printk(KERN_INFO "Broadcast pakcet per second became higher that the threthold.\n");
                         printk(KERN_INFO "--------Broadcast blocking started--------\n");
@@ -176,8 +182,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
                     else{
-                        sc_dev->p_counter->b_counter = 1;
-                        sc_dev->p_time->first_b_time = skb->tstamp;
+                        sc_dev.p_counter->b_counter = 1;
+                        sc_dev.p_time->first_b_time = skb->tstamp;
                         return NF_ACCEPT;
                     }
                 }
@@ -187,14 +193,14 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             }
 
             /* Multicast processing */
-            else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev->t_type & traffic_type)){
-                if(sc_dev->b_flag->m_flag == 1){
-                    if(skb->tstamp - sc_dev->p_time->block_m_time <= 1){
+            else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev.t_type & traffic_type)){
+                if(sc_dev.b_flag->m_flag == 1){
+                    if(skb->tstamp - sc_dev.p_time->block_m_time <= 1){
                         printk(KERN_INFO "Multicast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
-                        sc_dev->b_flag->m_flag = 0;
+                        sc_dev.b_flag->m_flag = 0;
                         printk(KERN_INFO "One second passed.");
                         printk(KERN_INFO "Multicast blocking was unset.");
                     }
@@ -203,25 +209,25 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 		this_cpu_inc(scd.pc_m_counter);
 		
 		for_each_online_cpu(cpu){
-			sc_dev->p_counter->m_counter += per_cpu(scd.pc_m_counter,cpu);
+			sc_dev.p_counter->m_counter += per_cpu(scd.pc_m_counter,cpu);
 		}
-                if(sc_dev->p_counter->m_counter == 1){
-			sc_dev->p_counter->m_counter = 0;
-                    	sc_dev->p_time->first_m_time = skb->tstamp;
+                if(sc_dev.p_counter->m_counter == 1){
+			sc_dev.p_counter->m_counter = 0;
+                    	sc_dev.p_time->first_m_time = skb->tstamp;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev->p_counter->m_counter < threshold){
-			sc_dev->p_counter->m_counter = 0;
+                else if(sc_dev.p_counter->m_counter < threshold){
+			sc_dev.p_counter->m_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev->p_counter->m_counter >= threshold){
-                	if(skb->tstamp - sc_dev->p_time->first_m_time <= 1){
+                else if(sc_dev.p_counter->m_counter >= threshold){
+                	if(skb->tstamp - sc_dev.p_time->first_m_time <= 1){
 				for_each_online_cpu(cpu){
 					per_cpu(scd.pc_m_counter,cpu) = 0;
 					}
-				sc_dev->p_counter->m_counter = 0;
-                        	sc_dev->b_flag->m_flag = 1;
-                        	sc_dev->p_time->block_m_time = skb->tstamp;
+				sc_dev.p_counter->m_counter = 0;
+                        	sc_dev.b_flag->m_flag = 1;
+                        	sc_dev.p_time->block_m_time = skb->tstamp;
 
                         	printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
                         	printk(KERN_INFO "--------Multicast blocking started--------\n");
@@ -230,8 +236,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         	return NF_DROP;
                     		}
                 	else{
-				sc_dev->p_counter->m_counter = 1;
-                        	sc_dev->p_time->first_m_time = skb->tstamp;
+				sc_dev.p_counter->m_counter = 1;
+                        	sc_dev.p_time->first_m_time = skb->tstamp;
                         	return NF_ACCEPT;
                     	}
                 }
@@ -313,13 +319,14 @@ static int init_module()
         }
 
 	memset(&sc_dev,0,sizeof(sc_dev));
+	memset(&scd,0,sizeof(scd));
 
 	sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
-	sc_dev.dev = dev_get_by_name(&init_net,d_name);/*dev_get_by_name(net,d_name);*/
+	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 
         ret = nf_register_net_hook(NULL,&nf_ops_storm);
         if(ret < 0){
-                printk(KERN_DEBUG "this traffic type wasn't registered.\n");
+                printk(KERN_DEBUG "failed to register net_hook.\n");
         }
 
         return 0;
