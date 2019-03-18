@@ -71,13 +71,15 @@ struct storm_control_dev{
 	struct packet_time *p_time;
 	int threshold; /* threshold to start blocking bum packet*/
 	int low_threshold; /* threshold to stop blocking specified packet*/
+	u16 t_type; /* user specified traffic type*/
+};
+static struct storm_control_dev sc_dev;
+
+struct per_cpu_counter{
 	int pc_b_counter; /* per cpu bloadcast packet counter */
 	int pc_m_counter; /* per cpu multicast packet counter */
 	int pc_uu_counter; /* per cpu unknown unicast packet counter */
-	u16 t_type; /* user specified traffic type*/
 };
-
-static struct storm_control_dev sc_dev;
 
 const static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
@@ -86,24 +88,37 @@ const static struct nf_hook_ops nf_ops_storm = {
         .priority = NF_IP_PRI_FIRST,                
 };
 
-static DEFINE_PER_CPU(struct storm_control_dev,scd);
+static DEFINE_PER_CPU(struct per_cpu_counter,pcc);
+
+static DEFINE_MUTEX(cpu_mutex);
+
 
 /*
 Percpuの処理・ロック・unknown unicast対応・デバック
 bps対応
 */
 
-int total_cpu_packet(struct storm_control_dev scd){
+static int total_cpu_packet(int cpu_cpunter){
 	int cpu;
 	int total_packet;
 
-	this_cpu_inc(scd.pc_b_counter);
+	this_cpu_inc(cpu_counter);
+	mutex_lock(&cpu_mutex);
 	for_each_online_cpu(cpu){
-		total_packet += per_cpu(scd.pc_b_counter,cpu);
+		total_packet += per_cpu(cpu_counter,cpu);
 	}
+	mutex_unlock(&cpu_mutex);
+
 	return total_packet;
 }
 
+static void initilize_cpu_counter(int pkt_type){
+	mutex_lock(&cpu_mutex);
+	for_each_online_cpu(cpu){
+		per_cpu(pkt_type,cpu) = 0;
+	}
+	mutex_unlock(&cpu_mutex);
+}
 
 /*the function hooks incoming packet*/
 static unsigned storm_hook(const struct nf_hook_ops *ops,
@@ -131,9 +146,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				if(sc_dev.p_counter->b_counter <= low_threshold){
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
-					for_each_online_cpu(cpu){
-						per_cpu(scd.pc_b_counter,cpu) = 0;
-					}
+					initilize_cpu_counter(pcc.b_counter);
+					mutex_unlock(&cpu_mutex);
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
 					return NF_DROP;
@@ -141,21 +155,14 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				else{
 					sc_dev.p_counter->b_counter = 0;
 					sc_dev.p_time->block_b_time = skb->tstamp;
-					for_each_online_cpu(cpu){
-						per_cpu(scd.pc_b_counter,cpu) = 0;
-					}
-
+					initilize_cpu_counter(pcc.b_counter);
 					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
 					printk(KERN_INFO "One more minute are added.\n");
 					return NF_DROP;
 				}
                     }
                 }
-
-		this_cpu_inc(scd.pc_b_counter);
-		for_each_online_cpu(cpu){
-			sc_dev.p_counter->b_counter += per_cpu(scd.pc_b_counter,cpu);
-		}
+		sc_dev.p_counter->b_counter = total_cpu_packet(scd);
 
                 if(sc_dev.p_counter->b_counter == 1){
 			sc_dev.p_counter->b_counter = 0;
@@ -168,9 +175,8 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                 }
                 else if(sc_dev.p_counter->b_counter >= threshold){
                     if(skb->tstamp - sc_dev.p_time->first_b_time <= 1){
-			for_each_online_cpu(cpu){
-				per_cpu(scd.pc_b_counter,cpu) = 0;
-			}
+			initilize_cpu_counter(pcc.b_counter);
+
                         sc_dev.p_counter->b_counter = 0;
                         sc_dev.b_flag->b_flag = 1;
                         sc_dev.p_time->block_b_time = skb->tstamp;
@@ -199,18 +205,30 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         printk(KERN_INFO "Multicast packet was dropped .\n");
                         return NF_DROP;
                     }
-                    else{
-                        sc_dev.b_flag->m_flag = 0;
-                        printk(KERN_INFO "One second passed.");
-                        printk(KERN_INFO "Multicast blocking was unset.");
-                    }
-                }
+		    else{
+				sc_dev.p_counter->m_counter = total_cpu_packet(scd);
+				if(sc_dev.p_counter->m_counter <= low_threshold){
+					sc_dev.b_flag->m_flag = 0;
+					sc_dev.p_counter->m_counter = 0;
+					initilize_cpu_counter(pcc.m_counter);
 
-		this_cpu_inc(scd.pc_m_counter);
+                        		printk(KERN_INFO "One second passed.\n");
+                        		printk(KERN_INFO "Broadcast blocking was unset.\n");
+					return NF_DROP;
+				}
+				else{
+					sc_dev.p_counter->m_counter = 0;
+					sc_dev.p_time->block_m_time = skb->tstamp;
+					initilize_cpu_counter(pcc.m_counter);
+
+					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
+					printk(KERN_INFO "One more minute are added.\n");
+					return NF_DROP;
+				}
+                    	}
+                }
+		sc_dev.p_counter->m_counter = total_cpu_packet(scd);
 		
-		for_each_online_cpu(cpu){
-			sc_dev.p_counter->m_counter += per_cpu(scd.pc_m_counter,cpu);
-		}
                 if(sc_dev.p_counter->m_counter == 1){
 			sc_dev.p_counter->m_counter = 0;
                     	sc_dev.p_time->first_m_time = skb->tstamp;
@@ -222,12 +240,10 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                 }
                 else if(sc_dev.p_counter->m_counter >= threshold){
                 	if(skb->tstamp - sc_dev.p_time->first_m_time <= 1){
-				for_each_online_cpu(cpu){
-					per_cpu(scd.pc_m_counter,cpu) = 0;
-					}
 				sc_dev.p_counter->m_counter = 0;
                         	sc_dev.b_flag->m_flag = 1;
                         	sc_dev.p_time->block_m_time = skb->tstamp;
+				initilize_cpu_counter(pcc.m_counter);
 
                         	printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
                         	printk(KERN_INFO "--------Multicast blocking started--------\n");
@@ -319,7 +335,7 @@ static int init_module()
         }
 
 	memset(&sc_dev,0,sizeof(sc_dev));
-	memset(&scd,0,sizeof(scd));
+	memset(&pcc,0,sizeof(pcc));
 
 	sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
