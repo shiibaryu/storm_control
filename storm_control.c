@@ -98,7 +98,8 @@ Percpuの処理・ロック・unknown unicast対応・デバック
 bps対応
 */
 
-static int total_cpu_packet(struct per_cpu_counter pc){
+static int total_cpu_packet(struct per_cpu_counter pc)
+{
 	int cpu;
 	int total_packet;
 
@@ -131,7 +132,8 @@ static int total_cpu_packet(struct per_cpu_counter pc){
 	return total_packet;
 }
 
-static void initilize_cpu_counter(struct per_cpu_counter pc){
+static void initilize_cpu_counter(struct per_cpu_counter pc)
+{
 	int cpu;
 
 	if(traffic_type == TRAFFIC_TYPE_BROADCAST){
@@ -155,6 +157,22 @@ static void initilize_cpu_counter(struct per_cpu_counter pc){
 		}
 		mutex_unlock(&cpu_mutex);
 	}
+}
+
+static int route4_input(struct sk_buff *skb)
+{
+	struct iphdr *hdr;
+	int error;
+
+	if (!skb->dev) {
+		log_err("skb lacks an incoming device.");
+		return -EINVAL;
+	}
+
+	hdr = ip_hdr(skb);
+	error = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
+
+	return error;
 }
 
 /*the function hooks incoming packet*/
@@ -182,6 +200,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
 					initilize_cpu_counter(pcc);
+					mutex_unlock(&cpu_mutex);
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
 					return NF_DROP;
@@ -292,51 +311,67 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     	}
                 }
             }
-	    /*else if( (ip_route_input(skb,,,,skb->dev))&& (sc_dev->t_type & traffic_type))*/
-	    /*else if(skb->dev->dev_addr != sc_dev->dev->dev_addr)*/
-	    /*else if (&& ( sc_dev->t_type & traffictype)) {
-		if(m_flag == true){
-                    if(skb->tstamp - block_m_time <= 1){
-                        printk(KERN_INFO "Multicast packet was dropped .\n");
+
+	    /*Unknown_Unicast processing*/
+	    else if((route4_input(skb) == err) && (sc_dev.t_type & traffic_type)){
+		if(sc_dev.b_flag->uu_flag == 1){
+                    if(skb->tstamp - sc_dev.p_time->block_uu_time <= 1){
+                        printk(KERN_INFO "Unknown_unicast packet was dropped .\n");
                         return NF_DROP;
                     }
-                    else{
-                        m_flag = false;
-                        printk(KERN_INFO "One second passed.");
-                        printk(KERN_INFO "Multicast blocking was unset.");
-                    }
-                }
+		    else{
+				sc_dev.p_counter->uu_counter = total_cpu_packet(scd);
+				if(sc_dev.p_counter->uu_counter <= low_threshold){
+					sc_dev.b_flag->uu_flag = 0;
+					sc_dev.p_counter->uu_counter = 0;
+					initilize_cpu_counter(pcc);
 
-                m_counter += 1;
-                if(m_counter == 1){
-                    first_m_time = skb->tstamp;
-                    return NF_ACCEPT;
-                }
-                else if(m_counter < threshold){
-                    return NF_ACCEPT;
-                }
-                else if(m_counter >= threshold){
-                    if(skb->tstamp - first_m_time <= 1){
-                        m_counter = 0;
-                        m_flag = true;
-                        block_m_time = skb->tstamp;
+                        		printk(KERN_INFO "One second passed.\n");
+                        		printk(KERN_INFO "Broadcast blocking was unset.\n");
+					return NF_DROP;
+				}
+				else{
+					sc_dev.p_counter->uu_counter = 0;
+					sc_dev.p_time->block_uu_time = skb->tstamp;
+					initilize_cpu_counter(pcc);
 
-                        printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
-                        printk(KERN_INFO "--------Multicast blocking started--------\n");
-                        printk(KERN_INFO "Multicast packet was dropped .\n");
-
-                        return NF_DROP;
-                    }
-                    else{
-                        first_m_time = skb->tstamp;
-                        m_counter = 1;
-                        return NF_ACCEPT;
-                    }
+					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
+					printk(KERN_INFO "One more minute are added.\n");
+					return NF_DROP;
+				}
+                    	}
                 }
-		    
-	    }*/
-	    
-            /* Any packets other that above can be passed */
+		sc_dev.p_counter->uu_counter = total_cpu_packet(scd);
+		
+                if(sc_dev.p_counter->uu_counter == 1){
+			sc_dev.p_counter->uu_counter = 0;
+                    	sc_dev.p_time->first_uu_time = skb->tstamp;
+                    	return NF_ACCEPT;
+                }
+                else if(sc_dev.p_counter->uu_counter < threshold){
+			sc_dev.p_counter->uu_counter = 0;
+                    	return NF_ACCEPT;
+                }
+                else if(sc_dev.p_counter->uu_counter >= threshold){
+                	if(skb->tstamp - sc_dev.p_time->first_uu_time <= 1){
+				sc_dev.p_counter->uu_counter = 0;
+                        	sc_dev.b_flag->uu_flag = 1;
+                        	sc_dev.p_time->block_uu_time = skb->tstamp;
+				initilize_cpu_counter(pcc);
+
+                        	printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
+                        	printk(KERN_INFO "--------Multicast blocking started--------\n");
+                        	printk(KERN_INFO "Multicast packet was dropped .\n");
+
+                        	return NF_DROP;
+                    		}
+                	else{
+				sc_dev.p_counter->uu_counter = 1;
+                        	sc_dev.p_time->first_uu_time = skb->tstamp;
+                        	return NF_ACCEPT;
+                    	}
+                }
+	    }
             else{
                 return NF_ACCEPT;
             }
