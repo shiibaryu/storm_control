@@ -18,6 +18,7 @@
 #include <linux/smp.h>
 #include <linux/cpumask.h>
 #include <linux/route.h>
+#include <linux/ip.h>
 
 /* the interface name a user can specify*/
 static char *d_name;
@@ -91,12 +92,6 @@ const static struct nf_hook_ops nf_ops_storm = {
 static DEFINE_PER_CPU(struct per_cpu_counter,pcc);
 
 static DEFINE_MUTEX(cpu_mutex);
-
-
-/*
-Percpuの処理・ロック・unknown unicast対応・デバック
-bps対応
-*/
 
 static int total_cpu_packet(struct per_cpu_counter pc)
 {
