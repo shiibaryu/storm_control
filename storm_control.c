@@ -3,6 +3,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -29,15 +30,15 @@ static char *traffic_type;
 module_param(traffic_type,charp,0660);
 
 /* bps or pps*/
-static char *per_second;
-module_param(per_second,charp,0660);
+/*static char *per_second;
+module_param(per_second,charp,0660);*/
 
 /* the threthhold that set the traffic limit*/
-static int *threshold;
+static int *threshold = 0;
 module_param(threshold,int,0660);
 
 /* the the threthold for low level limit*/
-static int *low_threshold;
+static int *low_threshold = 0;
 module_param(low_threshold,int,0660);
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
@@ -84,9 +85,10 @@ struct per_cpu_counter{
 
 const static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
+	.owner	= THIS_MODULE,
         .pf = NFPROTO_IPV4,
         .hooknum = NF_IP_PRE_ROUTING,
-        .priority = NF_IP_PRI_FIRST,                
+        .priority = NF_IP_PRI_FIRST,
 };
 
 static DEFINE_PER_CPU(struct per_cpu_counter,pcc);
@@ -98,7 +100,7 @@ static int total_cpu_packet(struct per_cpu_counter pc)
 	int cpu;
 	int total_packet;
 
-	if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+	if((sc_dev.t_type & traffic_type) == TRAFFIC_TYPE_BROADCAST){
 		this_cpu_inc(pc.pc_b_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -106,7 +108,7 @@ static int total_cpu_packet(struct per_cpu_counter pc)
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if(traffic_type == TRAFFIC_TYPE_MULTICAST){
+	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_MULTICAST){
 		this_cpu_inc(pc.pc_m_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -114,7 +116,7 @@ static int total_cpu_packet(struct per_cpu_counter pc)
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		this_cpu_inc(pc.pc_uu_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -131,21 +133,21 @@ static void initilize_cpu_counter(struct per_cpu_counter pc)
 {
 	int cpu;
 
-	if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+	if((sc_dev.t_type & traffic_type) == TRAFFIC_TYPE_BROADCAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_b_counter,cpu) = 0;
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if(traffic_type == TRAFFIC_TYPE_MULTICAST){
+	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_MULTICAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_m_counter,cpu) = 0;
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_uu_counter,cpu) = 0;
@@ -157,17 +159,20 @@ static void initilize_cpu_counter(struct per_cpu_counter pc)
 static int route4_input(struct sk_buff *skb)
 {
 	struct iphdr *hdr;
-	int error;
+	int err;
 
 	if (!skb->dev) {
-		log_err("skb lacks an incoming device.");
+		printk(KERN_INFO "skb lacks an incoming device.");
 		return -EINVAL;
 	}
 
 	hdr = ip_hdr(skb);
-	error = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
+	err = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
+	if(err){
+		return -1;
+	}
 
-	return error;
+	return 0;
 }
 
 /*the function hooks incoming packet*/
@@ -183,19 +188,18 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 
         if(skb->dev == sc_dev.dev){
 	    /*Broadcast processing*/
-            if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & traffic_type)){
-                if(sc_dev.b_flag.b_flag = 1){
+            if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
+                if(sc_dev.b_flag->b_flag = 1){
                     if(skb->tstamp - sc_dev.p_time->block_b_time <= 1 ){
                         printk(KERN_INFO "Broadcast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
 				sc_dev.p_counter->b_counter = total_cpu_packet(scd);
-				if(sc_dev.p_counter->b_counter <= low_threshold){
+				if((int)sc_dev.p_counter->b_counter <= low_threshold){
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
 					initilize_cpu_counter(pcc);
-					mutex_unlock(&cpu_mutex);
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
 					return NF_DROP;
@@ -210,18 +214,18 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				}
                     }
                 }
-		sc_dev.p_counter->b_counter = total_cpu_packet(scd);
+		sc_dev.p_counter->b_counter = total_cpu_packet(pcc);
 
                 if(sc_dev.p_counter->b_counter == 1){
 			sc_dev.p_counter->b_counter = 0;
                     	sc_dev.p_time->first_b_time = skb->tstamp;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->b_counter < threshold){
+                else if((int)sc_dev.p_counter->b_counter < threshold){
 		    	sc_dev.p_counter->b_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->b_counter >= threshold){
+                else if((int)sc_dev.p_counter->b_counter >= threshold){
                     if(skb->tstamp - sc_dev.p_time->first_b_time <= 1){
 			initilize_cpu_counter(pcc);
 
@@ -247,7 +251,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             }
 
             /* Multicast processing */
-            else if(skb->pkt_type == TRAFFIC_TYPE_UNKNOWN_UNICAST && (sc_dev.t_type & traffic_type)){
+            else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev.t_type & TRAFFIC_TYPE_MULTICAST)){
                 if(sc_dev.b_flag->m_flag == 1){
                     if(skb->tstamp - sc_dev.p_time->block_m_time <= 1){
                         printk(KERN_INFO "Multicast packet was dropped .\n");
@@ -255,7 +259,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
 		    else{
 				sc_dev.p_counter->m_counter = total_cpu_packet(scd);
-				if(sc_dev.p_counter->m_counter <= low_threshold){
+				if((int)sc_dev.p_counter->m_counter <= low_threshold){
 					sc_dev.b_flag->m_flag = 0;
 					sc_dev.p_counter->m_counter = 0;
 					initilize_cpu_counter(pcc);
@@ -282,11 +286,11 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     	sc_dev.p_time->first_m_time = skb->tstamp;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->m_counter < threshold){
+                else if((int)sc_dev.p_counter->m_counter < threshold){
 			sc_dev.p_counter->m_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->m_counter >= threshold){
+                else if((int)sc_dev.p_counter->m_counter >= threshold){
                 	if(skb->tstamp - sc_dev.p_time->first_m_time <= 1){
 				sc_dev.p_counter->m_counter = 0;
                         	sc_dev.b_flag->m_flag = 1;
@@ -308,7 +312,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             }
 
 	    /*Unknown_Unicast processing*/
-	    else if((route4_input(skb) == err) && (sc_dev.t_type & traffic_type)){
+	    else if((route4_input(skb) == -1 ) && (sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
 		if(sc_dev.b_flag->uu_flag == 1){
                     if(skb->tstamp - sc_dev.p_time->block_uu_time <= 1){
                         printk(KERN_INFO "Unknown_unicast packet was dropped .\n");
@@ -316,7 +320,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     }
 		    else{
 				sc_dev.p_counter->uu_counter = total_cpu_packet(scd);
-				if(sc_dev.p_counter->uu_counter <= low_threshold){
+				if((int)sc_dev.p_counter->uu_counter <= low_threshold){
 					sc_dev.b_flag->uu_flag = 0;
 					sc_dev.p_counter->uu_counter = 0;
 					initilize_cpu_counter(pcc);
@@ -343,11 +347,11 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                     	sc_dev.p_time->first_uu_time = skb->tstamp;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->uu_counter < threshold){
+                else if((int)sc_dev.p_counter->uu_counter < threshold){
 			sc_dev.p_counter->uu_counter = 0;
                     	return NF_ACCEPT;
                 }
-                else if(sc_dev.p_counter->uu_counter >= threshold){
+                else if((int)sc_dev.p_counter->uu_counter >= threshold){
                 	if(skb->tstamp - sc_dev.p_time->first_uu_time <= 1){
 				sc_dev.p_counter->uu_counter = 0;
                         	sc_dev.b_flag->uu_flag = 1;
@@ -383,15 +387,12 @@ static int init_module()
         printk(KERN_INFO "Storm control module was inserted.\n");
 
         if(strcmp(traffic_type,"broadcast") == 0){
-		traffic_type = TRAFFIC_TYPE_BROADCAST;
             	printk(KERN_INFO "storm control for broadcast was set.\n");
         }
         else if(strcmp(traffic_type,"multicast")==0){
-	    	traffic_type = TRAFFIC_TYPE_MULTICAST;
             	printk(KERN_INFO "storm control for multicast was set.\n");
         }
 	else if(strcmp(traffic_type,"unknown_unicast")==0){
-		traffic_type == TRAFFIC_TYPE_UNKNOWN_UNICAST;
 		printk(KERN_INFO "storm control for unknown_unicast was set.\n");
 	}
         else{
