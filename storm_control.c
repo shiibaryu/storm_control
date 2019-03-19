@@ -182,7 +182,6 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
 					initilize_cpu_counter(pcc);
-					mutex_unlock(&cpu_mutex);
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
 					return NF_DROP;
