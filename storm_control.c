@@ -9,6 +9,7 @@
 #include <linux/string.h>
 #include <linux/moduleparam.h>
 #include <linux/netdevice.h>
+#include <linux/netfilter.h>
 #include <linux/skbuff.h>
 #include <linux/ktime.h>
 #include <linux/if_packet.h>
@@ -87,20 +88,14 @@ struct per_cpu_counter{
 	int pc_uu_counter; /* per cpu unknown unicast packet counter */
 };
 
-const static struct nf_hook_ops nf_ops_storm __read_mostly = {
-	nf_ops_storm.hook = storm_hook,
-        nf_ops_storm.pf = NFPROTO_IPV4,
-        nf_ops_storm.hooknum = NF_IP_PRE_ROUTING,
-        nf_ops_storm.priority = NF_IP_PRI_FIRST,
-};
 
 static DEFINE_PER_CPU(struct per_cpu_counter,pcc);
 
 static DEFINE_MUTEX(cpu_mutex);
 
 /* a prototype for ip_route_input */
-ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
-				 u8 tos, struct net_device *devin)
+int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
+				 u8 tos, struct net_device *devin);
 
 
 static int total_cpu_packet(struct per_cpu_counter pc)
@@ -387,6 +382,13 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
             return NF_ACCEPT;
         }
 }
+
+const static struct nf_hook_ops nf_ops_storm __read_mostly = {
+	.hook = storm_hook,
+        .pf = NFPROTO_IPV4,
+        .hooknum = NF_IP_PRE_ROUTING,
+        .priority = NF_IP_PRI_FIRST,
+};
     
 static int 
 __init stctl_init_module(void)
@@ -422,11 +424,11 @@ __init stctl_init_module(void)
 
         return 0;
 }
-module_init (stctl_init_module);
+module_init(stctl_init_module);
 
 
 static void 
-__exit stctl_exit_module()
+__exit stctl_exit_module(void)
 {
 
 	/*free_percpu(storm_counter);*/
@@ -434,4 +436,4 @@ __exit stctl_exit_module()
 
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
-module_exit (stctl_exit_module);
+module_exit(stctl_exit_module);
