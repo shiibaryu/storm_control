@@ -98,26 +98,63 @@ Percpuの処理・ロック・unknown unicast対応・デバック
 bps対応
 */
 
-static int total_cpu_packet(int cpu_cpunter){
+static int total_cpu_packet(struct per_cpu_counter pc){
 	int cpu;
 	int total_packet;
 
-	this_cpu_inc(cpu_counter);
-	mutex_lock(&cpu_mutex);
-	for_each_online_cpu(cpu){
-		total_packet += per_cpu(cpu_counter,cpu);
+	if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+		this_cpu_inc(pc.pc_b_counter);
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			total_packet += per_cpu(pc.pc_b_counter,cpu);
+		}
+		mutex_unlock(&cpu_mutex);
 	}
-	mutex_unlock(&cpu_mutex);
+	else if(traffic_type == TRAFFIC_TYPE_MULTICAST){
+		this_cpu_inc(pc.pc_m_counter);
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			total_packet += per_cpu(pc.pc_m_counter,cpu);
+		}
+		mutex_unlock(&cpu_mutex);
+	}
+	else if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+		this_cpu_inc(pc.pc_uu_counter);
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			total_packet += per_cpu(pc.pc_uu_counter,cpu);
+		}
+		mutex_unlock(&cpu_mutex);
+	}
+
 
 	return total_packet;
 }
 
-static void initilize_cpu_counter(int pkt_type){
-	mutex_lock(&cpu_mutex);
-	for_each_online_cpu(cpu){
-		per_cpu(pkt_type,cpu) = 0;
+static void initilize_cpu_counter(struct per_cpu_counter pc){
+	int cpu;
+
+	if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			per_cpu(pc.pc_b_counter,cpu) = 0;
+		}
+		mutex_unlock(&cpu_mutex);
 	}
-	mutex_unlock(&cpu_mutex);
+	else if(traffic_type == TRAFFIC_TYPE_MULTICAST){
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			per_cpu(pc.pc_m_counter,cpu) = 0;
+		}
+		mutex_unlock(&cpu_mutex);
+	}
+	else if(traffic_type == TRAFFIC_TYPE_BROADCAST){
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			per_cpu(pc.pc_uu_counter,cpu) = 0;
+		}
+		mutex_unlock(&cpu_mutex);
+	}
 }
 
 /*the function hooks incoming packet*/
@@ -127,8 +164,6 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         const struct net_device *out,
         int (*okfn)(struct sk_buff*))
 {       
-	int cpu;
-
 	if(!skb){
             return NF_ACCEPT;
         }
@@ -146,7 +181,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				if(sc_dev.p_counter->b_counter <= low_threshold){
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
-					initilize_cpu_counter(pcc.b_counter);
+					initilize_cpu_counter(pcc);
 					mutex_unlock(&cpu_mutex);
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
@@ -155,7 +190,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				else{
 					sc_dev.p_counter->b_counter = 0;
 					sc_dev.p_time->block_b_time = skb->tstamp;
-					initilize_cpu_counter(pcc.b_counter);
+					initilize_cpu_counter(pcc);
 					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
 					printk(KERN_INFO "One more minute are added.\n");
 					return NF_DROP;
@@ -175,7 +210,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                 }
                 else if(sc_dev.p_counter->b_counter >= threshold){
                     if(skb->tstamp - sc_dev.p_time->first_b_time <= 1){
-			initilize_cpu_counter(pcc.b_counter);
+			initilize_cpu_counter(pcc);
 
                         sc_dev.p_counter->b_counter = 0;
                         sc_dev.b_flag->b_flag = 1;
@@ -210,7 +245,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				if(sc_dev.p_counter->m_counter <= low_threshold){
 					sc_dev.b_flag->m_flag = 0;
 					sc_dev.p_counter->m_counter = 0;
-					initilize_cpu_counter(pcc.m_counter);
+					initilize_cpu_counter(pcc);
 
                         		printk(KERN_INFO "One second passed.\n");
                         		printk(KERN_INFO "Broadcast blocking was unset.\n");
@@ -219,7 +254,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				else{
 					sc_dev.p_counter->m_counter = 0;
 					sc_dev.p_time->block_m_time = skb->tstamp;
-					initilize_cpu_counter(pcc.m_counter);
+					initilize_cpu_counter(pcc);
 
 					printk(KERN_INFO "Traffic flow exceed low threshold.\n");
 					printk(KERN_INFO "One more minute are added.\n");
@@ -243,7 +278,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				sc_dev.p_counter->m_counter = 0;
                         	sc_dev.b_flag->m_flag = 1;
                         	sc_dev.p_time->block_m_time = skb->tstamp;
-				initilize_cpu_counter(pcc.m_counter);
+				initilize_cpu_counter(pcc);
 
                         	printk(KERN_INFO "Multicast pakcet per second became higher that the threthold.\n");
                         	printk(KERN_INFO "--------Multicast blocking started--------\n");
@@ -350,7 +385,7 @@ static int init_module()
 
 static void exit_module()
 {
-	/*kfree(sc_dev);*/
+
 	/*free_percpu(storm_counter);*/
 	nf_unregister_net_hook(NULL,&nf_ops_storm);
 
