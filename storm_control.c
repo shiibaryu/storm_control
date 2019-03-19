@@ -21,6 +21,10 @@
 #include <linux/route.h>
 #include <linux/ip.h>
 
+MODULE_LICENSE("Debian");
+MODULE_AUTHOR("siibaa");
+MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
+
 /* the interface name a user can specify*/
 static char *d_name;
 module_param(d_name,charp,0660);
@@ -34,12 +38,12 @@ module_param(traffic_type,charp,0660);
 module_param(per_second,charp,0660);*/
 
 /* the threthhold that set the traffic limit*/
-static int *threshold = 0;
-module_param(threshold,int,0660);
+static int threshold = 0;
+module_param(threshold,int,0664);
 
 /* the the threthold for low level limit*/
-static int *low_threshold = 0;
-module_param(low_threshold,int,0660);
+static int low_threshold = 0;
+module_param(low_threshold,int,0664);
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
@@ -83,24 +87,28 @@ struct per_cpu_counter{
 	int pc_uu_counter; /* per cpu unknown unicast packet counter */
 };
 
-const static struct nf_hook_ops nf_ops_storm = {
-	.hook = storm_hook,
-	.owner	= THIS_MODULE,
-        .pf = NFPROTO_IPV4,
-        .hooknum = NF_IP_PRE_ROUTING,
-        .priority = NF_IP_PRI_FIRST,
+const static struct nf_hook_ops nf_ops_storm __read_mostly = {
+	nf_ops_storm.hook = storm_hook,
+        nf_ops_storm.pf = NFPROTO_IPV4,
+        nf_ops_storm.hooknum = NF_IP_PRE_ROUTING,
+        nf_ops_storm.priority = NF_IP_PRI_FIRST,
 };
 
 static DEFINE_PER_CPU(struct per_cpu_counter,pcc);
 
 static DEFINE_MUTEX(cpu_mutex);
 
+/* a prototype for ip_route_input */
+ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
+				 u8 tos, struct net_device *devin)
+
+
 static int total_cpu_packet(struct per_cpu_counter pc)
 {
 	int cpu;
 	int total_packet;
 
-	if((sc_dev.t_type & traffic_type) == TRAFFIC_TYPE_BROADCAST){
+	if(sc_dev.t_type & TRAFFIC_TYPE_BROADCAST){
 		this_cpu_inc(pc.pc_b_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -108,7 +116,7 @@ static int total_cpu_packet(struct per_cpu_counter pc)
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_MULTICAST){
+	else if(sc_dev.t_type & TRAFFIC_TYPE_MULTICAST){
 		this_cpu_inc(pc.pc_m_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -116,7 +124,7 @@ static int total_cpu_packet(struct per_cpu_counter pc)
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	else if(sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		this_cpu_inc(pc.pc_uu_counter);
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
@@ -133,21 +141,21 @@ static void initilize_cpu_counter(struct per_cpu_counter pc)
 {
 	int cpu;
 
-	if((sc_dev.t_type & traffic_type) == TRAFFIC_TYPE_BROADCAST){
+	if((sc_dev.t_type & TRAFFIC_TYPE_BROADCAST) == TRAFFIC_TYPE_BROADCAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_b_counter,cpu) = 0;
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_MULTICAST){
+	else if((sc_dev.t_type & TRAFFIC_TYPE_MULTICAST)== TRAFFIC_TYPE_MULTICAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_m_counter,cpu) = 0;
 		}
 		mutex_unlock(&cpu_mutex);
 	}
-	else if((sc_dev.t_type & traffic_type)== TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	else if((sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)== TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		mutex_lock(&cpu_mutex);
 		for_each_online_cpu(cpu){
 			per_cpu(pc.pc_uu_counter,cpu) = 0;
@@ -189,13 +197,13 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         if(skb->dev == sc_dev.dev){
 	    /*Broadcast processing*/
             if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
-                if(sc_dev.b_flag->b_flag = 1){
+                if(sc_dev.b_flag->b_flag == 1){
                     if(skb->tstamp - sc_dev.p_time->block_b_time <= 1 ){
                         printk(KERN_INFO "Broadcast packet was dropped .\n");
                         return NF_DROP;
                     }
                     else{
-				sc_dev.p_counter->b_counter = total_cpu_packet(scd);
+				sc_dev.p_counter->b_counter = total_cpu_packet(pcc);
 				if((int)sc_dev.p_counter->b_counter <= low_threshold){
 					sc_dev.b_flag->b_flag = 0;
 					sc_dev.p_counter->b_counter = 0;
@@ -258,7 +266,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
 		    else{
-				sc_dev.p_counter->m_counter = total_cpu_packet(scd);
+				sc_dev.p_counter->m_counter = total_cpu_packet(pcc);
 				if((int)sc_dev.p_counter->m_counter <= low_threshold){
 					sc_dev.b_flag->m_flag = 0;
 					sc_dev.p_counter->m_counter = 0;
@@ -279,7 +287,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				}
                     	}
                 }
-		sc_dev.p_counter->m_counter = total_cpu_packet(scd);
+		sc_dev.p_counter->m_counter = total_cpu_packet(pcc);
 		
                 if(sc_dev.p_counter->m_counter == 1){
 			sc_dev.p_counter->m_counter = 0;
@@ -319,7 +327,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
                         return NF_DROP;
                     }
 		    else{
-				sc_dev.p_counter->uu_counter = total_cpu_packet(scd);
+				sc_dev.p_counter->uu_counter = total_cpu_packet(pcc);
 				if((int)sc_dev.p_counter->uu_counter <= low_threshold){
 					sc_dev.b_flag->uu_flag = 0;
 					sc_dev.p_counter->uu_counter = 0;
@@ -340,7 +348,7 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
 				}
                     	}
                 }
-		sc_dev.p_counter->uu_counter = total_cpu_packet(scd);
+		sc_dev.p_counter->uu_counter = total_cpu_packet(pcc);
 		
                 if(sc_dev.p_counter->uu_counter == 1){
 			sc_dev.p_counter->uu_counter = 0;
@@ -380,49 +388,50 @@ static unsigned storm_hook(const struct nf_hook_ops *ops,
         }
 }
     
-static int init_module()
+static int 
+__init stctl_init_module(void)
 {       
         int ret = 0;
 
-        printk(KERN_INFO "Storm control module was inserted.\n");
+	memset(&sc_dev,0,sizeof(sc_dev));
+	memset(&pcc,0,sizeof(pcc));
+	/*sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);*/
+	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 
-        if(strcmp(traffic_type,"broadcast") == 0){
-            	printk(KERN_INFO "storm control for broadcast was set.\n");
+        ret = nf_register_hooks(&(nf_ops_storm));
+        if(ret){
+                printk(KERN_DEBUG "failed to register hook.\n");
+        }
+	printk (KERN_INFO "storm_control module is loaded\n");
+
+	if(strcmp(traffic_type,"broadcast") == 0){
+		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST 
+            	printk(KERN_INFO "Control target is broadcast.\n");
         }
         else if(strcmp(traffic_type,"multicast")==0){
-            	printk(KERN_INFO "storm control for multicast was set.\n");
+		sc_dev.t_type = TRAFFIC_TYPE_MULTICAST
+            	printk(KERN_INFO "Control target is multicast.\n");
         }
 	else if(strcmp(traffic_type,"unknown_unicast")==0){
-		printk(KERN_INFO "storm control for unknown_unicast was set.\n");
+		sc_dev.t_type = TRAFFIC_TYPE_UNKNOWN_UNICAST
+		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
         else{
             printk(KERN_DEBUG "this traffic type could not be registered.\n");
         }
 
-	memset(&sc_dev,0,sizeof(sc_dev));
-	memset(&pcc,0,sizeof(pcc));
-
-	sc_dev.t_type = (TRAFFIC_TYPE_BROADCAST | TRAFFIC_TYPE_MULTICAST | TRAFFIC_TYPE_UNKNOWN_UNICAST);
-	sc_dev.dev = dev_get_by_name(&init_net,d_name);
-
-        ret = nf_register_net_hook(NULL,&nf_ops_storm);
-        if(ret < 0){
-                printk(KERN_DEBUG "failed to register net_hook.\n");
-        }
-
         return 0;
 }
+module_init (stctl_init_module);
 
-static void exit_module()
+
+static void 
+__exit stctl_exit_module()
 {
 
 	/*free_percpu(storm_counter);*/
-	nf_unregister_net_hook(NULL,&nf_ops_storm);
+	nf_unregister_hook(&(nf_ops_storm));
 
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
-
-MODULE_LICENSE("Debian");
-MODULE_AUTHOR("siibaaaaaaaaaaaaaa");
-MODULE_INFO("strom control module");
-MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
+module_exit (stctl_exit_module);
