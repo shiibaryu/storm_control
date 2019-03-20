@@ -203,7 +203,7 @@ static void broadcast_packet_check(void){
 	    initilize_cpu_counter(pcc);
 	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    sc_dev.p_counter->b_counter = 0;
-	    sc_dev.d_flag->b_flag == FLAG_DOWN;
+	    sc_dev.d_flag->b_flag = FLAG_DOWN;
 	    printk(KERN_INFO "Broadcast pakcet per second was less than the threthold.\n");
 	    printk(KERN_INFO "--------Broadcast blocking ended.--------\n");
     }
@@ -237,7 +237,7 @@ static void multicast_packet_check(void){
 	    initilize_cpu_counter(pcc);
 	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    sc_dev.p_counter->m_counter = 0;
-	    sc_dev.d_flag->m_flag == FLAG_DOWN;
+	    sc_dev.d_flag->m_flag = FLAG_DOWN;
 	    printk(KERN_INFO "Multicast pakcet per second was less than the threthold.\n");
 	    printk(KERN_INFO "--------Multicast blocking ended--------.\n");
     }
@@ -271,7 +271,7 @@ static void unknown_unicast_packet_check(void){
 	    initilize_cpu_counter(pcc);
 	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    sc_dev.p_counter->UU_counter = 0;
-	    sc_dev.d_flag->uu_flag == FLAG_DOWN;
+	    sc_dev.d_flag->uu_flag = FLAG_DOWN;
 	    printk(KERN_INFO "Unknown Unicast pakcet per second was less than the threthold.\n");
 	    printk(KERN_INFO "--------Unknown Unicast blocking ended--------.\n");
     }
