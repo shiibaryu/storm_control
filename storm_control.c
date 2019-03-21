@@ -70,8 +70,8 @@ struct drop_flag{
 };
 
 struct first_packet_flag{
-	u16 b_flag:
-	u16 m_flag;
+	u16 b_flag; 
+	u16 m_flag; 
 	u16 uu_flag;
 };
 
@@ -386,6 +386,7 @@ storm_hook(
 		else{
 			return NF_ACCEPT;
 		}
+	}
 	else{
 		return NF_ACCEPT;
 	}
