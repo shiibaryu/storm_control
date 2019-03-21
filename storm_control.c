@@ -3,7 +3,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -17,8 +16,7 @@
 #include <linux/skbuff.h>
 #include <linux/if_packet.h>
 #include <linux/types.h>
-#include <linux/net_namespace.h>
-#include<linux/mutex.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
 #include <linux/ip.h>
