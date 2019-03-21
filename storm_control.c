@@ -390,6 +390,7 @@ storm_hook(
 	else{
 		return NF_ACCEPT;
 	}
+	return NF_ACCEPT;
 }
 
 static struct nf_hook_ops nf_ops_storm __read_mostly = {
