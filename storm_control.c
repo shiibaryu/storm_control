@@ -11,20 +11,18 @@
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6.h>
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/skbuff.h>
-#include <linux/ktime.h>
 #include <linux/if_packet.h>
 #include <linux/types.h>
 #include <linux/net_namespace.h>
 #include<linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
-#include <linux/smp.h>
-#include <linux/cpumask.h>
-#include <linux/route.h>
 #include <linux/ip.h>
+#include <net/route.h>
 
 MODULE_LICENSE("Debian");
 MODULE_AUTHOR("siibaa");
