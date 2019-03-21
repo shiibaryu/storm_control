@@ -56,6 +56,7 @@ module_param(low_threshold,int,0664);
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
 
+
 struct packet_counter{
 	int b_counter; /* the counter for broadcast*/
 	int m_counter; /* the counter for multicast*/
@@ -65,7 +66,7 @@ struct packet_counter{
 struct drop_flag{
 	u16 b_flag; /*the time at when first broadcast packet arrived*/
 	u16 m_flag; /*the time at when first multidcast packet arrived*/
-	u16 uu_time; /*the time at when first unknown_unicast packet arrived*/
+	u16 uu_flag; /*the time at when first unknown_unicast packet arrived*/
 };
 
 struct first_packet_flag{
@@ -270,7 +271,7 @@ static void unknown_unicast_packet_check(void){
     else if(sc_dev.p_counter->uu_counter < low_threshold && (sc_dev.d_flag->uu_flag & FLAG_UP)){
 	    initilize_cpu_counter(pcc);
 	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-	    sc_dev.p_counter->UU_counter = 0;
+	    sc_dev.p_counter->uu_counter = 0;
 	    sc_dev.d_flag->uu_flag = FLAG_DOWN;
 	    printk(KERN_INFO "Unknown Unicast pakcet per second was less than the threthold.\n");
 	    printk(KERN_INFO "--------Unknown Unicast blocking ended--------.\n");
@@ -343,10 +344,10 @@ storm_hook(
 				this_cpu_inc(pcc.pc_b_counter);
 				return NF_DROP;
 			}
-
+		}
 	    	else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev.t_type & TRAFFIC_TYPE_MULTICAST)){
 	    		if((sc_dev.f_flag->m_flag & FLAG_UP) && (sc_dev.d_flag->m_flag & FLAG_DOWN)){
-				sc_dev.flag->m_flag = FLAG_DOWN;
+				sc_dev.f_flag->m_flag = FLAG_DOWN;
 				printk(KERN_INFO "First multicast packet was arrived.\n");
 				printk(KERN_INFO "--------One second timer started--------\n");
 				setup_timer(&g_timer,check_packet, 0);
@@ -362,6 +363,7 @@ storm_hook(
 				this_cpu_inc(pcc.pc_m_counter);
 				return NF_DROP;
 			}
+		}
 		else if((route4_input(skb) == -1) && (sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
 			if((sc_dev.f_flag->uu_flag & FLAG_UP) && (sc_dev.d_flag->uu_flag & FLAG_DOWN)){
 				sc_dev.f_flag->uu_flag = FLAG_DOWN;
@@ -443,7 +445,7 @@ module_init(stctl_init_module);
 static void 
 __exit stctl_exit_module(void)
 {
-	free_percpu(&pcc);
+	/*free_percpu(&pcc);*/
 	nf_unregister_hook(&nf_ops_storm);
 	del_timer(&g_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
