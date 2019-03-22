@@ -62,7 +62,7 @@ struct storm_control_dev{
 static struct storm_control_dev sc_dev;
 
 /*per cpu bit*/
-static DEFINE_PER_CPU(unsigned int,pc_packet);
+static DEFINE_PER_CPU(int,pc_packet);
 
 int g_time_interval = 1000;
 struct timer_list g_timer;
