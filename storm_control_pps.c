@@ -1,0 +1,303 @@
+/* 
+ * Traffic storm control module for linux kernel
+ */
+
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/string.h>
+#include <linux/moduleparam.h>
+#include <linux/netdevice.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6.h>
+#include <linux/init.h>
+#include <linux/timer.h>
+#include <linux/skbuff.h>
+#include <linux/ktime.h>
+#include <linux/if_packet.h>
+#include <linux/types.h>
+#include <linux/net_namespace.h>
+#include<linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/percpu.h>
+#include <linux/ip.h>
+#include <net/route.h>
+
+
+MODULE_LICENSE("Debian");
+MODULE_AUTHOR("siibaa");
+MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
+
+/* the interface name a user can specify*/
+static char *d_name;
+module_param(d_name,charp,0660);
+
+
+/* the traffic type a user want to control storm*/
+static char *traffic_type;
+module_param(traffic_type,charp,0660);
+
+/* the threthhold that set the traffic limit*/
+static int threshold = 0;
+module_param(threshold,int,0664);
+
+/* the the threthold for low level limit*/
+static int low_threshold = 0;
+module_param(low_threshold,int,0664);
+
+#define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
+#define TRAFFIC_TYPE_BROADCAST          0x0002
+#define TRAFFIC_TYPE_MULTICAST          0x0004
+#define FLAG_UP				0x0001
+#define FLAG_DOWN			0x0002
+
+struct storm_control_dev{
+	struct net_device *dev;
+	int packet_counter *p_counter;
+    u16 drop_flag *d_flag;
+	u16 first_packet_flag *f_flag;
+	u16 t_type; /* user specified traffic type*/
+};
+static struct storm_control_dev sc_dev;
+
+/*per cpu bit*/
+static DEFINE_PER_CPU(unsigned int,pc_packet);
+
+int g_time_interval = 1000;
+struct timer_list g_timer;
+
+static DEFINE_MUTEX(cpu_mutex);
+
+/* a prototype for ip_route_input */
+int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
+				 u8 tos, struct net_device *devin);
+
+
+static int total_cpu_packet(int pcp)
+{
+	int cpu;
+	int total_packet;
+
+	/*rcu_read_lock()*/
+	mutex_lock(&cpu_mutex);
+	for_each_online_cpu(cpu){
+		total_packet += per_cpu(pcp,cpu);
+	}
+	mutex_unlock(&cpu_mutex);
+	/*rcu_read_unlock()*/
+
+	return total_packet;
+}
+
+static void initilize_cpu_counter(int pcp)
+{
+	int cpu;
+		/*rcu_read_lock()*/
+		mutex_lock(&cpu_mutex);
+		for_each_online_cpu(cpu){
+			per_cpu(pcp,cpu) = 0;
+		}
+		mutex_unlock(&cpu_mutex);
+		/*rcu_read_lock()*/
+}
+
+static void packet_check(void){
+	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
+	    initilize_cpu_counter(pc_packet);
+	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    sc_dev.p_counter = 0;
+	    sc_dev.d_flag = FLAG_UP;
+	    printk(KERN_INFO "Packet per second was more than the threthold.\n");
+	    printk(KERN_INFO "--------Blocking started--------\n");
+	    printk(KERN_INFO "Packet was dropped .\n");
+    }
+    else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
+	    initilize_cpu_counter(pc_packet);
+	    mod_timer(&g_timer,jiffies + msecs_to_jiffies(g_time_interval));
+	    sc_dev.p_counter = 0;
+	    printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
+	    printk(KERN_INFO "Packet was accepted .\n");
+    }
+    else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
+	    initilize_cpu_counter(pc_packet);
+	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    sc_dev.p_counter = 0;
+	    printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
+	    printk(KERN_INFO "Dropping packet continues.\n");
+    }
+    else if(sc_dev.p_counte < low_threshold && (sc_dev.d_flag & FLAG_UP)){
+	    initilize_cpu_counter(pc_packet);
+	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    sc_dev.p_counter = 0;
+	    sc_dev.d_flag = FLAG_DOWN;
+	    printk(KERN_INFO "Packet per second was less than the threthold.\n");
+	    printk(KERN_INFO "--------Packet blocking ended.--------\n");
+    }
+}
+
+static void check_packet(unsigned long data)
+{
+	printk(KERN_INFO "--------One Second passed--------\n");
+	sc_dev.p_counter = total_cpu_packet(pc_packet);
+    packet_check();
+}
+
+static int route4_input(struct sk_buff *skb)
+{
+	struct iphdr *hdr;
+	int err;
+
+	if (!skb->dev) {
+		printk(KERN_INFO "skb lacks an incoming device.");
+		return -EINVAL;
+	}
+
+	hdr = ip_hdr(skb);
+	err = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
+	if(err){
+		return -1;
+	}
+
+	return 0;
+}
+
+/*the function hooks incoming packet*/
+static unsigned int
+storm_hook(
+	void *priv,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
+{       
+	if(!skb){
+            return NF_ACCEPT;
+        }
+
+        if(skb->dev == sc_dev.dev){
+	    /*Broadcast processing*/
+	    	if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
+	    		if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
+					sc_dev.f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First broadcast packet was arrived.\n");
+					printk(KERN_INFO "One second timer started.\n");
+					setup_timer(&g_timer,check_packet, 0);
+					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+					this_cpu_inc(pc_packet);
+					return NF_ACCEPT;
+	    		}
+			else if(sc_dev.d_flag & FLAG_DOWN){
+				this_cpu_inc(pc_packet);
+				return NF_ACCEPT;
+			}
+			else if(sc_dev.d_flag & FLAG_UP){
+				this_cpu_inc(pc_packet);
+				return NF_DROP;
+			}
+		}
+	    	else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev.t_type & TRAFFIC_TYPE_MULTICAST)){
+	    		if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
+					sc_dev.f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First multicast packet was arrived.\n");
+					printk(KERN_INFO "--------One second timer started--------\n");
+					setup_timer(&g_timer,check_packet, 0);
+					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+					this_cpu_inc(pc_packet);
+				return NF_ACCEPT;
+	    		}
+			else if(sc_dev.d_flag & FLAG_DOWN){
+				this_cpu_inc(pc_packet);
+				return NF_ACCEPT;
+			}
+			else if(sc_dev.d_flag & FLAG_UP){
+				this_cpu_inc(pc_packet);
+				return NF_DROP;
+			}
+		}
+		else if((route4_input(skb) == -1) && (sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+			if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
+				sc_dev.f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First unknown unicast packet was arrived.\n");
+					printk(KERN_INFO "--------One second timer started--------\n");
+					setup_timer(&g_timer,check_packet, 0);
+					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+					this_cpu_inc(pc_packet);
+				return NF_ACCEPT;
+	    		}
+			else if(sc_dev.d_flag & FLAG_DOWN){
+				this_cpu_inc(pc_packet);
+				return NF_ACCEPT;
+			}
+			else if(sc_dev.d_flag->uu_flag & FLAG_UP){
+				this_cpu_inc(pc_packet);
+				return NF_DROP;
+			}
+		}
+		else{
+			return NF_ACCEPT;
+		}
+	}
+	else{
+		return NF_ACCEPT;
+	}
+	return NF_ACCEPT;
+}
+
+static struct nf_hook_ops nf_ops_storm __read_mostly = {
+	.hook = storm_hook,
+        .pf = NFPROTO_IPV4,
+        .hooknum = NF_INET_PRE_ROUTING,
+        .priority = NF_IP_PRI_FIRST,
+};
+    
+static int 
+__init stctl_init_module(void)
+{       
+        int ret = 0;
+
+	memset(&sc_dev,0,sizeof(sc_dev));
+	memset(&pc_packet,0,sizeof(pc_packet));
+	
+	sc_dev.dev = dev_get_by_name(&init_net,d_name);
+
+    ret = nf_register_hook(&nf_ops_storm);
+
+        if(ret){
+                printk(KERN_DEBUG "failed to register hook.\n");
+        }
+	printk (KERN_INFO "storm_control module is loaded\n");
+
+	if(strcmp(traffic_type,"broadcast") == 0){
+		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+            	printk(KERN_INFO "Control target is broadcast.\n");
+        }
+        else if(strcmp(traffic_type,"multicast")==0){
+		sc_dev.t_type = TRAFFIC_TYPE_MULTICAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+            	printk(KERN_INFO "Control target is multicast.\n");
+        }
+	else if(strcmp(traffic_type,"unknown_unicast")==0){
+		sc_dev.t_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+		printk(KERN_INFO "Control target is unknown_unicast.\n");
+	}
+        else{
+            printk(KERN_DEBUG "this traffic type could not be registered.\n");
+        }
+
+        return 0;
+}
+module_init(stctl_init_module);
+
+
+static void 
+__exit stctl_exit_module(void)
+{
+	nf_unregister_hook(&nf_ops_storm);
+	del_timer(&g_timer);
+    	printk(KERN_INFO "Storm control module was Removed.\n");
+}
+module_exit(stctl_exit_module);
