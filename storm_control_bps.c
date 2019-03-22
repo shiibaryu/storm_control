@@ -139,7 +139,7 @@ static void packet_check(void){
 static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
-	sc_dev.p_counter = total_cpu_packet(pcc);
+	sc_dev.p_counter = total_cpu_packet(pc_bit);
     packet_check();
 }
 
