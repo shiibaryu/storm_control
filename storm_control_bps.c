@@ -3,7 +3,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -11,6 +10,7 @@
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6.h>
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/skbuff.h>
@@ -21,8 +21,6 @@
 #include<linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
-#include <linux/smp.h>
-#include <linux/cpumask.h>
 #include <linux/ip.h>
 #include <net/route.h>
 
@@ -57,7 +55,7 @@ module_param(low_threshold,int,0664);
 struct storm_control_dev{
 	struct net_device *dev;
 	u16 packet_counter *p_counter;
-    u16 drop_flag *d_flag;
+    	u16 drop_flag *d_flag;
 	u16 first_packet_flag *f_flag;
 	u16 t_type; /* user specified traffic type*/
 };
