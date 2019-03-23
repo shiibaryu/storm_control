@@ -15,23 +15,22 @@ struct broadcast_info {
     struct sockaddr_in addr; 
     int permission;          
 };
-typedef struct broadcast_info bc_info_t;
 
 static int
-socket_initialize(bc_info_t *info, char *errmsg)
+socket_initialize(struct broadcast_info *info)
 {
     int rc = 0;
 
     info->sd = socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if(info->sd < 0){
-        sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
-        return(-1);
+        perror("socket");
+        return -1;
     }
 
     rc = setsockopt(info->sd, SOL_SOCKET, SO_BROADCAST,
                     (void *)&(info->permission), sizeof(info->permission));
     if(rc != 0){
-        sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
+        perror("setsocketopt");
         return -1;
     }
 
@@ -44,63 +43,60 @@ socket_initialize(bc_info_t *info, char *errmsg)
 
 
 static void
-socket_finalize(bc_info_t *info)
+socket_finalize(struct broadcast_info *info)
 {
-    /* ソケット破棄 */
-    if(info->sd != 0) close(info->sd);
+    if(info->sd != 0){
+        close(info->sd);
+    }
 
-    return;
 }
 
 static int
-broadcast_sendmsg(bc_info_t *info, char *errmsg)
+broadcast_sendmsg(struct broadcast_info *info)
 {
     int sendmsg_len = 0;
 
-    /* ブロードキャストを送信し続ける */
     while(1){
         sendmsg_len = sendto(info->sd, info->msg, info->msg_len, 0,
                              (struct sockaddr *)&(info->addr),
                               sizeof(info->addr));
         if(sendmsg_len != info->msg_len){
-            sprintf(errmsg, "invalid msg is sent.(%s)",
-                     __LINE__, strerror(errno));
-            return(-1);
+            fprintf(stderr,"rudp_sendto:sendto failed\n");
+            return -1;
         }
-        sleep(5);
+        /*sleep(5);*/
     }
 
-    return(0);
+    return 0;
 }
 
 static int
-broadcast_sender(bc_info_t *info, char *errmsg)
+broadcast_sender(struct broadcast_info *info)
 {
     int rc = 0;
 
-    /* ソケットの初期化 */
-    rc = socket_initialize(info, errmsg);
-    if(rc != 0) return(-1);
+    rc = socket_initialize(info);
+    if(rc != 0){
+        return -1;
+    }
 
-    /* ブロードキャストを送信する */
-    rc = broadcast_sendmsg(info, errmsg);
+    rc = broadcast_sendmsg(info);
 
-    /* ソケットの終期化 */
     socket_finalize(info);
 
-    return(0);
+    return 0;
 }
 
 
 static int
-initialize(int argc, char *argv[], bc_info_t *info, char *errmsg)
+initialize(int argc, char *argv[], struct broadcast_info *info)
 {
     if(argc != 4){
-        sprintf(errmsg, "Usage: %s <ip-addr> <port> <msg>", argv[0]);
+        printf("Usage: <ip-addr> <port> <msg>");
         return(-1);
     }
 
-    memset(info, 0, sizeof(bc_info_t));
+    memset(info, 0, sizeof(struct broadcast_info));
     info->ipaddr     = argv[1];
     info->port       = atoi(argv[2]);
     info->msg        = argv[3];
@@ -113,20 +109,19 @@ int
 main(int argc, char *argv[])
 {
     int rc = 0;
-    bc_info_t info = {0};
-    char errmsg[BUFSIZ];
+    struct broadcast_info info;
 
-    rc = initialize(argc, argv, &info, errmsg);
+    rc = initialize(argc, argv, &info);
     if(rc != 0){
-        fprintf(stderr, "Error: %s\n", errmsg);
-        return(-1);
+        fprintf(stderr, "Error: failed to initialize. \n");
+        return -1;
     }
 
-    rc = broadcast_sender(&info, errmsg);
+    rc = broadcast_sender(&info);
     if(rc != 0){
-        fprintf(stderr, "Error: %s\n", errmsg);
-        return(-1);
+        fprintf(stderr, "Error: failed to broadcast_send.\n");
+        return -1;
     }
 
-    return(0);
+    return 0;
 }
