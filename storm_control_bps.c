@@ -3,6 +3,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -10,7 +11,6 @@
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
-#include <linux/netfilter_ipv6.h>
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/skbuff.h>
@@ -21,6 +21,8 @@
 #include<linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
+#include <linux/smp.h>
+#include <linux/cpumask.h>
 #include <linux/ip.h>
 #include <net/route.h>
 
@@ -54,9 +56,9 @@ module_param(low_threshold,int,0664);
 
 struct storm_control_dev{
 	struct net_device *dev;
-	u16 packet_counter *p_counter;
-    	u16 drop_flag *d_flag;
-	u16 first_packet_flag *f_flag;
+	unsigned int p_counter;
+    	u16 d_flag;
+	u16 f_flag;
 	u16 t_type; /* user specified traffic type*/
 };
 static struct storm_control_dev sc_dev;
@@ -77,15 +79,15 @@ int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 static unsigned int total_cpu_packet(unsigned int pcb)
 {
 	int cpu;
-	unsigned int total_packet;
+	unsigned int total_packet = 0;
 
-	/*rcu_read_lock()*/
+	/*read_lock();*/
 	mutex_lock(&cpu_mutex);
-	for_each_online_cpu(cpu){
+	for_each_present_cpu(cpu){
 		total_packet += per_cpu(pcb,cpu);
 	}
 	mutex_unlock(&cpu_mutex);
-	/*rcu_read_unlock()*/
+	/*read_unlock();*/
 
 	return total_packet;
 }
@@ -93,54 +95,55 @@ static unsigned int total_cpu_packet(unsigned int pcb)
 static void initilize_cpu_counter(unsigned int pcb)
 {
 	int cpu;
-		/*rcu_read_lock()*/
+		/*write_lock();*/
 		mutex_lock(&cpu_mutex);
-		for_each_online_cpu(cpu){
+		for_each_present_cpu(cpu){
 			per_cpu(pcb,cpu) = 0;
 		}
 		mutex_unlock(&cpu_mutex);
-		/*rcu_read_lock()*/
+		/*write_unlock();*/
 }
 
 static void packet_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
-	    initilize_cpu_counter(pc_bit);
-	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-	    sc_dev.p_counter = 0;
-	    sc_dev.d_flag= FLAG_UP;
-	    printk(KERN_INFO "Bit per second was more than the threthold.\n");
-	    printk(KERN_INFO "--------Blocking started--------\n");
-	    printk(KERN_INFO "Packet was dropped .\n");
-    }
+		sc_dev.d_flag = FLAG_UP;
+		sc_dev.p_counter = 0;
+		initilize_cpu_counter(pc_packet);
+		mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
+	    	printk(KERN_INFO "--------Blocking started--------\n");
+	    	printk(KERN_INFO "Packet was dropped .\n");
+	}
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
-	    initilize_cpu_counter(pc_bit);
-	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-	    sc_dev.p_counter = 0;
-	    printk(KERN_INFO "Bit pakcet per second was less than the threthold.\n");
-	    printk(KERN_INFO "Packet was accepted .\n");
-    }
+	    	sc_dev.p_counter = 0;
+		initilize_cpu_counter(pc_packet);
+	   	mod_timer(&g_timer,jiffies + msecs_to_jiffies(g_time_interval));
+		printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
+	    	printk(KERN_INFO "Packet was accepted .\n");
+    	}
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
-	    initilize_cpu_counter(pc_bit);
-	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-	    sc_dev.p_counter = 0;
-	    printk(KERN_INFO "Bit pakcet per second was more than the lowthrethold.\n");
-	    printk(KERN_INFO "Dropping packet continues.\n");
-    }
+		sc_dev.p_counter = 0;
+	    	initilize_cpu_counter(pc_packet);
+	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
+	    	printk(KERN_INFO "Dropping packet continues.\n");
+    	}
     else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
-	    initilize_cpu_counter(pc_bit);
-	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-	    sc_dev.p_counter = 0;
-	    sc_dev.d_flag = FLAG_DOWN;
-	    printk(KERN_INFO "Bit per second was less than the threthold.\n");
-	    printk(KERN_INFO "--------Packet blocking ended.--------\n");
+	    	sc_dev.d_flag = FLAG_DOWN;
+		sc_dev.p_counter = 0;
+		initilize_cpu_counter(pc_packet);
+	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
+	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
     }
 }
+
 
 static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
 	sc_dev.p_counter = total_cpu_packet(pc_bit);
-    packet_check();
+    	packet_check();
 }
 
 static int route4_input(struct sk_buff *skb)
@@ -227,7 +230,7 @@ storm_hook(
 				this_cpu_add(pc_bit,skb->len);
 				return NF_ACCEPT;
 			}
-			else if(sc_dev.d_flag->uu_flag & FLAG_UP){
+			else if(sc_dev.d_flag & FLAG_UP){
 				this_cpu_add(pc_bit,skb->len);
 				return NF_DROP;
 			}
@@ -255,16 +258,15 @@ __init stctl_init_module(void)
         int ret = 0;
 
 	memset(&sc_dev,0,sizeof(sc_dev));
-	memset(&pc_bit,0,sizeof(pc_bit));
-	
+    	initialize_cpu_counter(pc_bit);
+
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 
-    ret = nf_register_hook(&nf_ops_storm);
+    	ret = nf_register_hook(&nf_ops_storm);
 
         if(ret){
                 printk(KERN_DEBUG "failed to register hook.\n");
         }
-	printk (KERN_INFO "storm_control module is loaded\n");
 
 	if(strcmp(traffic_type,"broadcast") == 0){
 		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
@@ -287,6 +289,9 @@ __init stctl_init_module(void)
         else{
             printk(KERN_DEBUG "this traffic type could not be registered.\n");
         }
+
+	printk (KERN_INFO "storm_control module is loaded\n");
+
 
         return 0;
 }
