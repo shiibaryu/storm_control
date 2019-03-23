@@ -3,6 +3,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -10,7 +11,6 @@
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
-#include <linux/netfilter_ipv6.h>
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/skbuff.h>
@@ -21,6 +21,8 @@
 #include<linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
+#include <linux/smp.h>
+#include <linux/cpumask.h>
 #include <linux/ip.h>
 #include <net/route.h>
 
@@ -54,9 +56,9 @@ module_param(low_threshold,int,0664);
 
 struct storm_control_dev{
 	struct net_device *dev;
-	u16 packet_counter *p_counter;
-    	u16 drop_flag *d_flag;
-	u16 first_packet_flag *f_flag;
+	u16 p_counter;
+    u16 d_flag;
+	u16 f_flag;
 	u16 t_type; /* user specified traffic type*/
 };
 static struct storm_control_dev sc_dev;
@@ -77,7 +79,7 @@ int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 static unsigned int total_cpu_packet(unsigned int pcb)
 {
 	int cpu;
-	unsigned int total_packet;
+	unsigned int total_packet = 0;
 
 	/*rcu_read_lock()*/
 	mutex_lock(&cpu_mutex);
@@ -227,7 +229,7 @@ storm_hook(
 				this_cpu_add(pc_bit,skb->len);
 				return NF_ACCEPT;
 			}
-			else if(sc_dev.d_flag->uu_flag & FLAG_UP){
+			else if(sc_dev.d_flag & FLAG_UP){
 				this_cpu_add(pc_bit,skb->len);
 				return NF_DROP;
 			}
