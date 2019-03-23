@@ -54,9 +54,9 @@ module_param(low_threshold,int,0664);
 
 struct storm_control_dev{
 	struct net_device *dev;
-	int packet_counter *p_counter;
-    u16 drop_flag *d_flag;
-	u16 first_packet_flag *f_flag;
+	int p_counter;
+    	u16 d_flag;
+	u16 f_flag;
 	u16 t_type; /* user specified traffic type*/
 };
 static struct storm_control_dev sc_dev;
@@ -77,7 +77,7 @@ int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 static int total_cpu_packet(int pcp)
 {
 	int cpu;
-	int total_packet;
+	int total_packet = 0;
 
 	/*rcu_read_lock()*/
 	mutex_lock(&cpu_mutex);
@@ -126,7 +126,7 @@ static void packet_check(void){
 	    printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    printk(KERN_INFO "Dropping packet continues.\n");
     }
-    else if(sc_dev.p_counte < low_threshold && (sc_dev.d_flag & FLAG_UP)){
+    else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
 	    initilize_cpu_counter(pc_packet);
 	    mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    sc_dev.p_counter = 0;
@@ -227,7 +227,7 @@ storm_hook(
 				this_cpu_inc(pc_packet);
 				return NF_ACCEPT;
 			}
-			else if(sc_dev.d_flag->uu_flag & FLAG_UP){
+			else if(sc_dev.d_flag & FLAG_UP){
 				this_cpu_inc(pc_packet);
 				return NF_DROP;
 			}
