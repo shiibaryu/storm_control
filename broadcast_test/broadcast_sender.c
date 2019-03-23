@@ -103,7 +103,7 @@ initialize(int argc, char *argv[], struct broadcast_info *info)
     info->msg_len    = strlen(argv[3]);
     info->permission = 1;
 
-    return(0);
+    return 0;
 }
 int
 main(int argc, char *argv[])
