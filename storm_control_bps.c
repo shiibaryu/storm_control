@@ -92,7 +92,7 @@ static unsigned int total_cpu_packet(unsigned int pcb)
 	return total_packet;
 }
 
-static void initilize_cpu_counter(unsigned int pcb)
+static void initialize_cpu_counter(unsigned int pcb)
 {
 	int cpu;
 		/*write_lock();*/
@@ -108,7 +108,7 @@ static void packet_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_bit);
 		mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
@@ -116,14 +116,14 @@ static void packet_check(void){
 	}
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
 	    	sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_bit);
 	   	mod_timer(&g_timer,jiffies + msecs_to_jiffies(g_time_interval));
 		printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "Packet was accepted .\n");
     	}
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
 		sc_dev.p_counter = 0;
-	    	initilize_cpu_counter(pc_packet);
+	    	initialize_cpu_counter(pc_bit);
 	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    	printk(KERN_INFO "Dropping packet continues.\n");
@@ -131,7 +131,7 @@ static void packet_check(void){
     else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
 	    	sc_dev.d_flag = FLAG_DOWN;
 		sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_bit);
 	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");

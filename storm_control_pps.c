@@ -89,7 +89,7 @@ static int total_cpu_packet(int pcp)
 	return total_packet;
 }
 
-static void initilize_cpu_counter(int pcp)
+static void initialize_cpu_counter(int pcp)
 {
 	int cpu;
 		/*write_lock();*/
@@ -105,7 +105,7 @@ static void packet_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initilaize_cpu_counter(pc_packet);
 		mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
@@ -113,14 +113,14 @@ static void packet_check(void){
     }
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_packet);
 	    	mod_timer(&g_timer,jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "Packet was accepted .\n");
     }
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
 		sc_dev.p_counter = 0;
-	    	initilize_cpu_counter(pc_packet);
+	    	initialize_cpu_counter(pc_packet);
 	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    	printk(KERN_INFO "Dropping packet continues.\n");
@@ -128,7 +128,7 @@ static void packet_check(void){
     else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
 	    	sc_dev.d_flag = FLAG_DOWN;
 		sc_dev.p_counter = 0;
-		initilize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_packet);
 	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
 	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
@@ -254,7 +254,7 @@ __init stctl_init_module(void)
         int ret = 0;
 
 	memset(&sc_dev,0,sizeof(sc_dev));
-    	initialize_cpu_counter(pc_bit);
+    	initialize_cpu_counter(pc_packet);
 	
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 
