@@ -137,7 +137,7 @@ static void threshold_comparison(void){
     }
 }
 
-static void check_packet(unsigned long data)
+static void threshold_comparison(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
 	sc_dev.p_counter = total_cpu_packet(pc_packet);
