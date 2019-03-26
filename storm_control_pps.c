@@ -63,10 +63,10 @@ struct storm_control_dev{
 };
 static struct storm_control_dev sc_dev;
 
+struct timer_list sc_timer;
+
 /*per cpu packet*/
 static DEFINE_PER_CPU(int,pc_packet);
-
-struct timer_list sc_timer;
 
 static DEFINE_MUTEX(cpu_mutex);
 
@@ -107,7 +107,7 @@ static void threshold_comparison(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
-		initilaize_cpu_counter(pc_packet);
+		initialize_cpu_counter(pc_packet);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
@@ -137,11 +137,11 @@ static void threshold_comparison(void){
     }
 }
 
-static void threshold_comparison(unsigned long data)
+static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
 	sc_dev.p_counter = total_cpu_packet(pc_packet);
-    	packet_check();
+    	threshold_comparison();
 }
 
 static int route4_input(struct sk_buff *skb)
@@ -249,7 +249,7 @@ storm_hook(
 	return NF_ACCEPT;
 }
 
-static struct nf_hook_ops nf_ops_storm __read_mostly = {
+static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
         .pf = NFPROTO_IPV4,
         .hooknum = NF_INET_PRE_ROUTING,
@@ -268,17 +268,16 @@ __init stctl_init_module(void)
 	sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
 	sc_timer.data = 0;
 	sc_timer.function = check_packet;
+
+	ret = nf_register_hook(&nf_ops_storm);
+        if(ret){
+                printk(KERN_DEBUG "failed to register hook.\n");
+        }
 	
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 	if (!sc_dev.dev){
 		return -ENODEV;
 	}
-
-    	ret = nf_register_hook(&nf_ops_storm);
-
-        if(ret){
-                printk(KERN_DEBUG "failed to register hook.\n");
-        }
 
 	if(strcmp(traffic_type,"broadcast") == 0){
 		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
