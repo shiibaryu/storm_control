@@ -51,6 +51,8 @@ module_param(low_threshold,int,0664);
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
+#define TIMER_TIMEOUT_SECS    	1
+
 
 struct storm_control_dev{
 	struct net_device *dev;
@@ -61,17 +63,17 @@ struct storm_control_dev{
 };
 static struct storm_control_dev sc_dev;
 
-/*per cpu bit*/
+/*per cpu packet*/
 static DEFINE_PER_CPU(int,pc_packet);
 
-int g_time_interval = 1000;
-struct timer_list g_timer;
+struct timer_list sc_timer;
 
 static DEFINE_MUTEX(cpu_mutex);
 
 /* a prototype for ip_route_input */
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
+
 
 static int total_cpu_packet(int pcp)
 {
@@ -93,20 +95,20 @@ static void initialize_cpu_counter(int pcp)
 {
 	int cpu;
 		/*write_lock();*/
-		mutex_lock(&cpu_mutex);
-		for_each_present_cpu(cpu){
-			per_cpu(pcp,cpu) = 0;
-		}
-		mutex_unlock(&cpu_mutex);
+	mutex_lock(&cpu_mutex);
+	for_each_present_cpu(cpu){
+		per_cpu(pcp,cpu) = 0;
+	}
+	mutex_unlock(&cpu_mutex);
 		/*write_unlock();*/
 }
 
-static void packet_check(void){
+static void threshold_comparison(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
 		initilaize_cpu_counter(pc_packet);
-		mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
 	    	printk(KERN_INFO "Packet was dropped .\n");
@@ -114,14 +116,14 @@ static void packet_check(void){
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.p_counter = 0;
 		initialize_cpu_counter(pc_packet);
-	    	mod_timer(&g_timer,jiffies + msecs_to_jiffies(g_time_interval));
+		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "Packet was accepted .\n");
     }
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
 		sc_dev.p_counter = 0;
 	    	initialize_cpu_counter(pc_packet);
-	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    	printk(KERN_INFO "Dropping packet continues.\n");
     }
@@ -129,7 +131,7 @@ static void packet_check(void){
 	    	sc_dev.d_flag = FLAG_DOWN;
 		sc_dev.p_counter = 0;
 		initialize_cpu_counter(pc_packet);
-	    	mod_timer(&g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
     }
@@ -155,11 +157,20 @@ static int route4_input(struct sk_buff *skb)
 	hdr = ip_hdr(skb);
 	err = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
 	if(err){
+
 		return -1;
 	}
 
 	return 0;
 }
+
+/*
+タイマーが同時にセットされたらまずいので、最初のタイマーセットは必ず一回のみ
+そうすれば、そのタイマーが発火した時にcheckが呼び出されて、カウンターをチェックして、
+二度目以降のタイマーセットも最初のタイマーを持っている関数にしか実行できなくなる
+
+timer,hook,dev_put,その他関数、メモリ
+*/
 
 /*the function hooks incoming packet*/
 static unsigned int
@@ -179,8 +190,7 @@ storm_hook(
 					sc_dev.f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First broadcast packet was arrived.\n");
 					printk(KERN_INFO "One second timer started.\n");
-					setup_timer(&g_timer,check_packet, 0);
-					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+					add_timer(&sc_timer);
 					this_cpu_inc(pc_packet);
 					return NF_ACCEPT;
 	    		}
@@ -198,8 +208,7 @@ storm_hook(
 					sc_dev.f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First multicast packet was arrived.\n");
 					printk(KERN_INFO "--------One second timer started--------\n");
-					setup_timer(&g_timer,check_packet, 0);
-					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
+					add_timer(&sc_timer);
 					this_cpu_inc(pc_packet);
 				return NF_ACCEPT;
 	    		}
@@ -215,11 +224,10 @@ storm_hook(
 		else if((route4_input(skb) == -1) && (sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
 			if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
 				sc_dev.f_flag = FLAG_DOWN;
-					printk(KERN_INFO "First unknown unicast packet was arrived.\n");
-					printk(KERN_INFO "--------One second timer started--------\n");
-					setup_timer(&g_timer,check_packet, 0);
-					mod_timer( &g_timer, jiffies + msecs_to_jiffies(g_time_interval));
-					this_cpu_inc(pc_packet);
+				printk(KERN_INFO "First unknown unicast packet was arrived.\n");
+				printk(KERN_INFO "--------One second timer started--------\n");
+				add_timer(&sc_timer);
+				this_cpu_inc(pc_packet);
 				return NF_ACCEPT;
 	    		}
 			else if(sc_dev.d_flag & FLAG_DOWN){
@@ -255,8 +263,16 @@ __init stctl_init_module(void)
 
 	memset(&sc_dev,0,sizeof(sc_dev));
     	initialize_cpu_counter(pc_packet);
+
+	init_timer(&sc_timer);
+	sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+	sc_timer.data = 0;
+	sc_timer.function = check_packet;
 	
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
+	if (!sc_dev.dev){
+		return -ENODEV;
+	}
 
     	ret = nf_register_hook(&nf_ops_storm);
 
@@ -296,8 +312,9 @@ module_init(stctl_init_module);
 static void 
 __exit stctl_exit_module(void)
 {
+	dev_put(sc_dev.dev);
 	nf_unregister_hook(&nf_ops_storm);
-	del_timer(&g_timer);
+	del_timer(&sc_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
 module_exit(stctl_exit_module);
