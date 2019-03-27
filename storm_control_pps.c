@@ -22,6 +22,8 @@
 #include <linux/slab.h>
 #include <linux/percpu.h>
 #include <linux/ip.h>
+#include <linux/cpumask.h>
+#include <linux/percpu-defs.h>
 #include <net/route.h>
 
 
