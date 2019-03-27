@@ -63,7 +63,6 @@ static struct storm_control_dev sc_dev;
 
 struct timer_list sc_timer;
 
-----------------------------------------------------------------
 /*per cpu packet*/
 static DEFINE_PER_CPU(int,pc_packet);
 
@@ -72,7 +71,6 @@ static DEFINE_MUTEX(cpu_mutex);
 /* a prototype for ip_route_input */
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
------------------------------------------------------------------
 
 static int total_cpu_packet(int tcp)
 {
