@@ -58,7 +58,11 @@ module_param(low_threshold,int,0664);
 
 struct storm_control_dev{
 	struct net_device *dev;
+	char ctl_type[6];
 	int p_counter;
+	int threshold;
+	int low_threshold;
+	u16 reg_flag;
     	u16 d_flag; /*drop_flag*/
 	u16 f_flag; /*first time or not*/
 	u16 t_type; /* user specified traffic type*/
@@ -178,6 +182,10 @@ storm_hook(
             return NF_ACCEPT;
         }
 
+	if(sc_dev.reg_flag && FLAG_DOWN){
+		return NF_ACCEPT;
+	}
+	
         if(skb->dev == sc_dev.dev){
 	    /*Broadcast processing*/
 	    	if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
@@ -246,33 +254,17 @@ storm_hook(
 
 /* Generic Netlink implementation */
 static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info * info);
-static int storm_nl_del_ep(struct sk_buff *skb, struct genl_info * info);
-static int storm_nl_dump_ep(struct sk_buff *skb, struct genl_info * info);
 
 static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 	[STORM_ATTR_ENDPOINT] = { .type = NLA_BINARY,
-				     .len =
-				     sizeof(p) },
+				     .len = sizeof(struct storm_param) },
 };
 
-static struct genl_ops storm_nl_ops[] = {
-	{
-		.cmd	= STORM_CMD_ADD_ENDPOINT,
-		.doit	= storm_nl_add_ep,
-		.policy	= storm_nl_policy,
-		.flags	= GENL_ADMIN_PERM,
-	},
-	{
-		.cmd	= STORM_CMD_DEL_ENDPOINT,
-		.doit	= storm_nl_del_ep,
-		.policy	= storm_nl_policy,
-		.flags	= GENL_ADMIN_PERM,
-	},
-	{
-		.cmd	= STORM_CMD_GET_ENDPOINT,
-		.dumpit	= storm_nl_dump_ep,
-		.policy	= storm_nl_policy,
-	},
+static struct genl_ops storm_nl_ops = {
+	.cmd	= STORM_CMD_ADD_ENDPOINT,
+	.doit	= storm_nl_add_ep,
+	.policy	= storm_nl_policy,
+	.flags	= GENL_ADMIN_PERM,
 };
 
 static struct genl_family graft_nl_family = {
@@ -288,21 +280,54 @@ static struct genl_family graft_nl_family = {
 
 static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info *info)
 {
-	/*届いたメッセージからdevやppsの数値などを受け取り、取り出して、グローバルに宣言している
-	  構造体に詰めて、初期化する
-	  そんでフラグを立てて、パケットが来たら本格的にストーム制御の処理が始まるようにする*/
-}
+	struct storm_param sp;
 
-static int storm_nl_del_ep(struct sk_buff *skb, struct genl_info *info)
-{
-	do stctl_exit_module(void);
+	if (!info->attrs[STORM_ATTR_ENDPOINT]){
+		return -EINVAL;
 
-}
+	}
 
-static int storm_nl_dump_ep(struct sk_buff *skb, struct genl_info *info)
-{
+	nlm_mempy(&sp,info->attrs[STORM_ATTR_ENDPOINT],sizeof(ps));
 	
+	sc_dev.dev = dev_get_by_name(&init_net,sp.dev);
+	if (!sc_dev.dev){
+		return -1;
+	}
+
+	if(sp.traffic_type && TRAFFIC_TYPE_BROADCAST){
+		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+            	printk(KERN_INFO "Control target is broadcast.\n");
+        }
+        else if(sp.traffic_type && TRAFFIC_TYPE_MULTICAST){
+		sc_dev.t_type = TRAFFIC_TYPE_MULTICAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+            	printk(KERN_INFO "Control target is multicast.\n");
+        }
+	else if(sp.traffic_type && TRAFFIC_TYPE_UNKNOWN_UNICAST){
+		sc_dev.t_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
+		sc_dev.f_flag = FLAG_UP;
+		sc_dev.d_flag = FLAG_DOWN;
+		printk(KERN_INFO "Control target is unknown_unicast.\n");
+	}
+        else{
+            printk(KERN_INFO "this traffic type could not be registered.\n");
+        }
+
+	strncpy(sc_dev.ctl_type,sp.control_type,sizeof(sc_dev.ctl_type));
+
+	sc_dev.threshold = ps.threshold;
+	if(ps.low_threshold != NULL){
+		sc_dev.low_threshold = ps.low_threshold;
+	}	
+
+	sc_dev.reg_flag = FLAG_UP;
+
+	return 0;
 }
+
 
 static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
@@ -317,6 +342,9 @@ __init stctl_init_module(void)
         int ret = 0;
 
 	memset(&sc_dev,0,sizeof(sc_dev));
+
+	sc_dev.reg_flag = FLAG_DOWN;
+
     	initialize_cpu_counter(pc_packet);
 
 	init_timer(&sc_timer);
@@ -335,42 +363,12 @@ __init stctl_init_module(void)
 		printk(KERN_INFO "failed to register genl.\n");
 		goto gnel_register_failed;
 	}
-	
-	sc_dev.dev = dev_get_by_name(&init_net,d_name);
-	if (!sc_dev.dev){
-		goto dev_get_failed;
-	}
-
-	if(strcmp(traffic_type,"broadcast") == 0){
-		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
-		sc_dev.f_flag = FLAG_UP;
-		sc_dev.d_flag = FLAG_DOWN;
-            	printk(KERN_INFO "Control target is broadcast.\n");
-        }
-        else if(strcmp(traffic_type,"multicast")==0){
-		sc_dev.t_type = TRAFFIC_TYPE_MULTICAST;
-		sc_dev.f_flag = FLAG_UP;
-		sc_dev.d_flag = FLAG_DOWN;
-            	printk(KERN_INFO "Control target is multicast.\n");
-        }
-	else if(strcmp(traffic_type,"unknown_unicast")==0){
-		sc_dev.t_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
-		sc_dev.f_flag = FLAG_UP;
-		sc_dev.d_flag = FLAG_DOWN;
-		printk(KERN_INFO "Control target is unknown_unicast.\n");
-	}
-        else{
-            printk(KERN_INFO "this traffic type could not be registered.\n");
-        }
 
 	printk(KERN_INFO "storm_control module is loaded\n");
 
 	return ret;
 
 gnel_register_failed:
-	genl_unregister_family(&storm_nl_family);
-
-dev_get_failed:
 	nf_unregister_hook(&nf_ops_storm);
 
 register_hook_failed:
