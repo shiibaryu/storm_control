@@ -301,6 +301,7 @@ module_init(stctl_init_module);
 static void 
 __exit stctl_exit_module(void)
 {
+	dev_put(sc_dev.dev);
 	nf_unregister_hook(&nf_ops_storm);
 	del_timer(&g_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");

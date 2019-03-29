@@ -18,12 +18,14 @@
 #include <linux/if_packet.h>
 #include <linux/types.h>
 #include <linux/net_namespace.h>
-#include<linux/mutex.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/percpu.h>
 #include <linux/ip.h>
 #include <linux/cpumask.h>
 #include <linux/percpu-defs.h>
+#include <net/genetlink.h>
+#include <net/netns/generic.h>
 #include <net/route.h>
 
 
@@ -40,11 +42,11 @@ static char *traffic_type;
 module_param(traffic_type,charp,0660);
 
 /* the threthhold that set the traffic limit*/
-static int threshold = 0;
+static int threshold;
 module_param(threshold,int,0664);
 
 /* the the threthold for low level limit*/
-static int low_threshold = 0;
+static int low_threshold;
 module_param(low_threshold,int,0664);
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
@@ -52,7 +54,7 @@ module_param(low_threshold,int,0664);
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
-#define TIMER_TIMEOUT_SECS    	1
+#define TIMER_TIMEOUT_SECS    		1
 
 struct storm_control_dev{
 	struct net_device *dev;
@@ -139,6 +141,7 @@ static void threshold_check(void){
 static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
+	sc_dev.p_counter = 0;
 	sc_dev.p_counter = total_cpu_packet(pc_packet);
     	threshold_check();
 }
@@ -165,7 +168,7 @@ static int route4_input(struct sk_buff *skb)
 }
 
 /*the function hooks incoming packet*/
-static unsigned int
+unsigned int
 storm_hook(
 	void *priv,
         struct sk_buff *skb,
@@ -241,6 +244,66 @@ storm_hook(
 	return NF_ACCEPT;
 }
 
+/* Generic Netlink implementation */
+static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info * info);
+static int storm_nl_del_ep(struct sk_buff *skb, struct genl_info * info);
+static int storm_nl_dump_ep(struct sk_buff *skb, struct genl_info * info);
+
+static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
+	[STORM_ATTR_ENDPOINT] = { .type = NLA_BINARY,
+				     .len =
+				     sizeof(p) },
+};
+
+static struct genl_ops storm_nl_ops[] = {
+	{
+		.cmd	= STORM_CMD_ADD_ENDPOINT,
+		.doit	= storm_nl_add_ep,
+		.policy	= storm_nl_policy,
+		.flags	= GENL_ADMIN_PERM,
+	},
+	{
+		.cmd	= STORM_CMD_DEL_ENDPOINT,
+		.doit	= storm_nl_del_ep,
+		.policy	= storm_nl_policy,
+		.flags	= GENL_ADMIN_PERM,
+	},
+	{
+		.cmd	= STORM_CMD_GET_ENDPOINT,
+		.dumpit	= storm_nl_dump_ep,
+		.policy	= storm_nl_policy,
+	},
+};
+
+static struct genl_family graft_nl_family = {
+	.name		= STORM_GENL_NAME,
+	.version	= STORM_GENL_VERSION,
+	.maxattr	= STORM_ATTR_MAX,
+	.hdrsize	= 0,
+	.netnsok	= true,
+	.ops		= storm_nl_ops,
+	.n_ops		= ARRAY_SIZE(storm_nl_ops),
+	.module		= THIS_MODULE,
+};
+
+static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info *info)
+{
+	/*届いたメッセージからdevやppsの数値などを受け取り、取り出して、グローバルに宣言している
+	  構造体に詰めて、初期化する
+	  そんでフラグを立てて、パケットが来たら本格的にストーム制御の処理が始まるようにする*/
+}
+
+static int storm_nl_del_ep(struct sk_buff *skb, struct genl_info *info)
+{
+	do stctl_exit_module(void);
+
+}
+
+static int storm_nl_dump_ep(struct sk_buff *skb, struct genl_info *info)
+{
+	
+}
+
 static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
 	.hooknum = NF_INET_PRE_ROUTING,
@@ -264,12 +327,18 @@ __init stctl_init_module(void)
 	ret = nf_register_hook(&nf_ops_storm);
         if(ret){
                 printk(KERN_INFO "failed to register hook.\n");
-		return ret;
+		goto register_hook_failed;
         }
+
+	ret = genl_register_family(&storm_nl_family);
+	if(ret){
+		printk(KERN_INFO "failed to register genl.\n");
+		goto gnel_register_failed;
+	}
 	
 	sc_dev.dev = dev_get_by_name(&init_net,d_name);
 	if (!sc_dev.dev){
-		return -ENODEV;
+		goto dev_get_failed;
 	}
 
 	if(strcmp(traffic_type,"broadcast") == 0){
@@ -296,7 +365,18 @@ __init stctl_init_module(void)
 
 	printk(KERN_INFO "storm_control module is loaded\n");
 
-        return 0;
+	return ret;
+
+gnel_register_failed:
+	genl_unregister_family(&storm_nl_family);
+
+dev_get_failed:
+	nf_unregister_hook(&nf_ops_storm);
+
+register_hook_failed:
+	del_timer(&sc_timer);
+
+        return ret;
 }
 module_init(stctl_init_module);
 
@@ -306,6 +386,7 @@ __exit stctl_exit_module(void)
 {
 	dev_put(sc_dev.dev);
 	nf_unregister_hook(&nf_ops_storm);
+	genl_unregister_family(&storm_nl_family);
 	del_timer(&sc_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
