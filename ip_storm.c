@@ -105,7 +105,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(atoi(*argv) != NULL){
+			if(argc > 0){
 				sp->low_threshold = atoi(*argv);
 			}
 		}
