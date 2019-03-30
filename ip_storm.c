@@ -1,5 +1,5 @@
 /*
- * ip_storm.c 
+ * storm_ctl.c 
  */
 
 #include <stdio.h>
@@ -14,24 +14,22 @@
 #include <linux/un.h>
 #include <linux/genetlink.h>
 
-#include "utils.h"
-#include "ip_common.h"
+#include 
 
-
-#define CMD_SIZE 						6
-#define device_name_max 				10
-#define traffic_name_max 				15
+#define CMD_SIZE 6
+#define device_name_max 10
+#define traffic_name_max 15
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 
 struct storm_param{
 	char dev[device_name_max];
-	u16  traffic_type[traffic_name_max];
-	char control_type[6];
+	char traffic_type[traffic_name_max];
+	u16  control_type;
 	int  threshold;
 	int  low_threshold;
-}__attribute__((__packed__));
+};
 
 void usage(void){
 	fprintf(stderr,
@@ -83,52 +81,37 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 		else if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
-			strncpy(sp->dev,argv,sizeof(argv));
+			strncpy(sp->dev,argv,sizeof(argv);
 		}
 		else if(strcmp(*argv,"type") == 0){
 			argc--;
 			argv++;
-			if(strcmp(*argv,"multicast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_MULTICAST,sizeof(u16)));	
-			}
-			else if(strcmp(*argv,"broadcast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_BROADCAST,sizeof(u16));	
-			}		
-			else if(strcmp(*argv,"unknown_unicast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_UNKNOWN_UNICAST,sizeof(u16));	
-			}
+			strncpy(sp->traffic_type,argv,sizeof(argv);			
 		}
 		else if(strcmp(*argv,"pps") == 0){
-			strncpy(sp->control_type,argv,sizeof(argv));		
 			argc--;
 			argv++;
-			sp->threshold = atoi(*argv);
-			argc--;
-			argv++;
-			if(atoi(*argv) != NULL){
-				sp->low_threshold = atoi(*argv);
-			}
+			strncpy(sp->control_type,argv,sizeof(argv);			
 		}
 		else if(strcmp(*argv,"bps") == 0){
-			strncpy(sp->control_type,argv,sizeof(argv));		
 			argc--;
 			argv++;
-			sp->threshold = atoi(*argv);
-			argc--;
-			argv++;
-			if(atoi(*argv) != NULL){
-				sp->low_threshold = atoi(*argv);
-			}		
+			strncpy(sp->control_type,argv,sizeof(argv);			
 		}
 		else if(strcmp(*argv,"level") == 0){
 			argc--;
 			argv++;
-			sp->threshold = atoi(*argv);
+			strncpy(sp->control_type,argv,sizeof(argv);			
+		}
+		else if(*argv == ){
 			argc--;
 			argv++;
-			if(atoi(*argv) != NULL){
-				sp->low_threshold = atoi(*argv);
-			}	
+			sp->threshold = (int *)argv;
+		}
+		else if(strcmp(*argv,"数字") == 0){
+			argc--;
+			argv++;
+			sp->low_threshold = (int *)argv;
 		}
 		else{
 			fprintf(stderr,
@@ -140,74 +123,34 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 	return 0;
 } 
 
-static int send_msg_kernel(int argc,char **argv)
+/*構造体を登録して、アドレスをparseの関数に渡し、
+　パースしてもらって、構造体がつまり、その詰まった構造体
+　をカーネルへ送る関数を定義し、送る関数を作る(あとは多分削除用とかshow用がいるけど、ひとまず削除だけでいいかな)
+　それができたら、メイン関数にparseとそのさっきの関数を登録して、カーネルにメッセージが送られる
+　 カーネルにメッセージが送られたら、それを元にdoitの関数が動き、そこでdevとppsをセットして、flagをonにすれば
+　 動くって感じ？*/
+
+
+static int send_msg_kernel(struct nl_sock *sock)
 {
-	struct storm_param ps;
 
-	if(parse_args(argc,argv,&ps) < 0){
-		return -1;
-	}
 
-	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
-		     STORM_CMD_ADD_ENDPOINT, NLM_F_REQUEST | NLM_F_ACK);
-	
-	addattr_l(&req.n,1024,STORM_ATTR_ENDPOINT,&ps,sizeof(ps));
-
-	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
-			return -2;
-	}
-
-	return 0;
 }
 
 int main(int argc, char *argv){
+	struct storm_param ps;
 
-	int rec;
-
-	if (argc < 1 || !matches(*argv, "help")){
-		usage();
-	}
-
-	if (genl_init_handle(&genl_rth, STORM_GENL_NAME, &genl_family)){
-		exit(-1);
-	}
+	/*構造体にデータを詰め込む*/
+	parse_args(argc,argv,&ps);
 	
-	ret = send_msg_kernel(argc,argv);
-	if(ret < 0){
-		printf("failed to send msg to kernel.");
-		return -1;
-	}
+	/*メモリの準備*/
+	prep_nl_sock(&nlsock);
+	/*ソケット繋いで、構造体を送る*/
+	send_msg_kernel(ps,);
+
+	/*そうなると、カーネル側でdoit関数が動き、送ったメッセージを受け取り、あっちで
+	  グローバルに宣言している構造体の変数に入れ込んだり、フラグをいじればいける！！！
+	*/
 
 	return 0;
 }
-
-/*struct nl_sock *sock;
-	struct nl_msg *msg;
-	int family;*/
-
-/*allocate a new netlink socket*/
-	/*sock = nl_socket_alloc();
-	if(!sock) {
-		fprintf(stderr, "Unable to alloc nl socket!\n");
-		exit(EXIT_FAILURE);
-	}*/
-
-	/*Connect to generic netlink socket on kernel side*/
-	/*if (genl_connect(sock)) {
-		fprintf(stderr, "Unable to connect to genl!\n");
-		goto exit_err;
-	}
-
-	family = genl_ctrl_resolve(sock,);
-
-	msg = nlmsg_alloc();
-	if(!genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, family_id, 0, NLM_F_REQUEST, GENL_TEST_C_MSG, 0)) {
-		fprintf(stderr, "failed to put nl hdr!\n");
-		err = -ENOMEM;
-		goto out;
-
-			out:
-	nlmsg_free(msg);
-	return err;
-	}*/
-	
