@@ -14,6 +14,8 @@
 #include <linux/un.h>
 #include <linux/genetlink.h>
 
+#include <storm.h>
+
 #include "libgenl.h"
 #include "utils.h"
 #include "ip_common.h"
@@ -25,11 +27,14 @@
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
+#define PPS								0x0001
+#define BPS								0x0002
+#define LEVEL							0x0004
 
 struct storm_param{
 	char dev[device_name_max];
 	u16  traffic_type[traffic_name_max];
-	char control_type[6];
+	u16  control_type;
 	int  threshold;
 	int  low_threshold;
 }__attribute__((__packed__));
@@ -80,25 +85,47 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			argc--;
 			argv++;
 			if(strcmp(*argv,"multicast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_MULTICAST,sizeof(u16)));	
+				sp->traffic_type = TRAFFIC_TYPE_MULTICAST;
 			}
 			else if(strcmp(*argv,"broadcast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_BROADCAST,sizeof(u16));	
+				sp->traffic_type = TRAFFIC_TYPE_BROADCAST;
 			}		
 			else if(strcmp(*argv,"unknown_unicast") == 0){
-				strncpy(sp->traffic_type,TRAFFIC_TYPE_UNKNOWN_UNICAST,sizeof(u16));	
+				sp->traffic_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
 			}
 		}
-		else if(strcmp(*argv,"pps") == 0 || strcmp(*argv,"bps") == 0 || strcmp(*argv,"level") == 0){
-			strncpy(sp->control_type,argv,sizeof(argv));		
+		else if(strcmp(*argv,"pps") == 0){
+			sp->control_type = PPS;
 			argc--;
 			argv++;
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(argc > 0){
+			if(atoi(*argv) != NULL){
 				sp->low_threshold = atoi(*argv);
 			}
+		}
+		else if(strcmp(*argv,"bps") == 0){
+			sp->control_type = BPS;
+			argc--;
+			argv++;
+			sp->threshold = atoi(*argv);
+			argc--;
+			argv++;
+			if(atoi(*argv) != NULL){
+				sp->low_threshold = atoi(*argv);
+			}		
+		}
+		else if(strcmp(*argv,"level") == 0){
+			sp->control_type = LEVEL;
+			argc--;
+			argv++;
+			sp->threshold = atoi(*argv);
+			argc--;
+			argv++;
+			if(atoi(*argv) != NULL){
+				sp->low_threshold = atoi(*argv);
+			}	
 		}
 		else{
 			fprintf(stderr,

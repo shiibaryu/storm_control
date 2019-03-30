@@ -28,41 +28,42 @@
 #include <net/netns/generic.h>
 #include <net/route.h>
 
+#include <storm.h>
+
 
 MODULE_LICENSE("Debian");
 MODULE_AUTHOR("siibaa");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
-
-/* the interface name a user can specify*/
-static char *d_name;
-module_param(d_name,charp,0660);
-
-/* the traffic type a user want to control storm*/
-static char *traffic_type;
-module_param(traffic_type,charp,0660);
-
-/* the threthhold that set the traffic limit*/
-static int threshold;
-module_param(threshold,int,0664);
-
-/* the the threthold for low level limit*/
-static int low_threshold;
-module_param(low_threshold,int,0664);
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
+#define PPS				0x0001
+#define BPS				0x0002
+#define LEVEL				0x0004
 #define TIMER_TIMEOUT_SECS    		1
+
+struct pb_counter{
+	int packet_counter;
+	unsigned int bit_counter;
+	unsigned int level_counter;
+};
+
+/*
+pbl_ typeをもとに使う関数を変える処理
+sc_dev.pbcl->packet_counter = total_cpu_packet(rjiga;gajjrwgoij)
+　
+*/
 
 struct storm_control_dev{
 	struct net_device *dev;
-	char ctl_type[6];
-	int p_counter;
+	struct pb_counter *pblc;
 	int threshold;
 	int low_threshold;
-	u16 reg_flag;
+	u16 pbl_type; /*flag to specify pps or bps or level*/
+	u16 reg_flag; /*specify whethere generic netlink was registere or not*/
     	u16 d_flag; /*drop_flag*/
 	u16 f_flag; /*first time or not*/
 	u16 t_type; /* user specified traffic type*/
@@ -73,6 +74,8 @@ struct timer_list sc_timer;
 
 /*per cpu packet*/
 static DEFINE_PER_CPU(int,pc_packet);
+static DEFINE_PER_CPU(unsigned int,pc_bit);
+
 
 static DEFINE_MUTEX(cpu_mutex);
 
@@ -96,6 +99,22 @@ static int total_cpu_packet(int tcp)
 	return total_packet;
 }
 
+static unsigned int total_cpu_bit(unsigned int pcb)
+{
+	int cpu;
+	unsigned int total_bit = 0;
+
+	/*read_lock();*/
+	mutex_lock(&cpu_mutex);
+	for_each_present_cpu(cpu){
+		total_packet += per_cpu(pcb,cpu);
+	}
+	mutex_unlock(&cpu_mutex);
+	/*read_unlock();*/
+
+	return total_bit;
+}
+
 static void initialize_cpu_counter(int pcp)
 {
 	int cpu=0;
@@ -111,6 +130,7 @@ static void initialize_cpu_counter(int pcp)
 static void threshold_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
+		if(sc_dev.ctl_type)
 		sc_dev.p_counter = 0;
 		initialize_cpu_counter(pc_packet);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
@@ -145,7 +165,6 @@ static void threshold_check(void){
 static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
-	sc_dev.p_counter = 0;
 	sc_dev.p_counter = total_cpu_packet(pc_packet);
     	threshold_check();
 }
@@ -182,10 +201,10 @@ storm_hook(
             return NF_ACCEPT;
         }
 
-	if(sc_dev.reg_flag && FLAG_DOWN){
+	if(sc_dev.reg_flag & FLAG_DOWN){
 		return NF_ACCEPT;
 	}
-	
+
         if(skb->dev == sc_dev.dev){
 	    /*Broadcast processing*/
 	    	if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
@@ -267,7 +286,7 @@ static struct genl_ops storm_nl_ops = {
 	.flags	= GENL_ADMIN_PERM,
 };
 
-static struct genl_family _nl_family = {
+static struct genl_family storm_nl_family = {
 	.name		= STORM_GENL_NAME,
 	.version	= STORM_GENL_VERSION,
 	.maxattr	= STORM_ATTR_MAX,
@@ -294,19 +313,19 @@ static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info *info)
 		return -1;
 	}
 
-	if(sp.traffic_type && TRAFFIC_TYPE_BROADCAST){
+	if(sp.traffic_type & TRAFFIC_TYPE_BROADCAST){
 		sc_dev.t_type = TRAFFIC_TYPE_BROADCAST;
 		sc_dev.f_flag = FLAG_UP;
 		sc_dev.d_flag = FLAG_DOWN;
             	printk(KERN_INFO "Control target is broadcast.\n");
         }
-        else if(sp.traffic_type && TRAFFIC_TYPE_MULTICAST){
+        else if(sp.traffic_type & TRAFFIC_TYPE_MULTICAST){
 		sc_dev.t_type = TRAFFIC_TYPE_MULTICAST;
 		sc_dev.f_flag = FLAG_UP;
 		sc_dev.d_flag = FLAG_DOWN;
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	else if(sp.traffic_type && TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	else if(sp.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		sc_dev.t_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
 		sc_dev.f_flag = FLAG_UP;
 		sc_dev.d_flag = FLAG_DOWN;
@@ -316,10 +335,10 @@ static int storm_nl_add_ep(struct sk_buff *skb, struct genl_info *info)
             printk(KERN_INFO "this traffic type could not be registered.\n");
         }
 
-	strncpy(sc_dev.ctl_type,sp.control_type,sizeof(sc_dev.ctl_type));
+	sc_dev.pbl_type = sp.control_type;
 
-	sc_dev.threshold = ps.threshold;
-	if(ps.low_threshold != NULL){
+	sc_dev.threshold = sp.threshold;
+	if(ps.low_threshold > 0){
 		sc_dev.low_threshold = ps.low_threshold;
 	}	
 
