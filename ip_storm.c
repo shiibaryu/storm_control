@@ -18,9 +18,9 @@
 #include "ip_common.h"
 
 
-#define CMD_SIZE 			6
-#define device_name_max 		10
-#define traffic_name_max 		15
+#define CMD_SIZE 						6
+#define device_name_max 				10
+#define traffic_name_max 				15
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
@@ -98,16 +98,37 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 				strncpy(sp->traffic_type,TRAFFIC_TYPE_UNKNOWN_UNICAST,sizeof(u16));	
 			}
 		}
-		else if(strcmp(*argv,"pps") == 0 || strcmp(*argv,"bps") == 0 || strcmp(*argv,"level") == 0){
+		else if(strcmp(*argv,"pps") == 0){
 			strncpy(sp->control_type,argv,sizeof(argv));		
 			argc--;
 			argv++;
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(argc > 0){
+			if(atoi(*argv) != NULL){
 				sp->low_threshold = atoi(*argv);
 			}
+		}
+		else if(strcmp(*argv,"bps") == 0){
+			strncpy(sp->control_type,argv,sizeof(argv));		
+			argc--;
+			argv++;
+			sp->threshold = atoi(*argv);
+			argc--;
+			argv++;
+			if(atoi(*argv) != NULL){
+				sp->low_threshold = atoi(*argv);
+			}		
+		}
+		else if(strcmp(*argv,"level") == 0){
+			argc--;
+			argv++;
+			sp->threshold = atoi(*argv);
+			argc--;
+			argv++;
+			if(atoi(*argv) != NULL){
+				sp->low_threshold = atoi(*argv);
+			}	
 		}
 		else{
 			fprintf(stderr,
