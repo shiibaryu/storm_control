@@ -98,7 +98,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 				strncpy(sp->traffic_type,TRAFFIC_TYPE_UNKNOWN_UNICAST,sizeof(u16));	
 			}
 		}
-		else if(strcmp(*argv,"pps") == 0){
+		else if(strcmp(*argv,"pps") == 0 || strcmp(*argv,"bps") == 0 || strcmp(*argv,"level") == 0){
 			strncpy(sp->control_type,argv,sizeof(argv));		
 			argc--;
 			argv++;
@@ -108,27 +108,6 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			if(atoi(*argv) != NULL){
 				sp->low_threshold = atoi(*argv);
 			}
-		}
-		else if(strcmp(*argv,"bps") == 0){
-			strncpy(sp->control_type,argv,sizeof(argv));		
-			argc--;
-			argv++;
-			sp->threshold = atoi(*argv);
-			argc--;
-			argv++;
-			if(atoi(*argv) != NULL){
-				sp->low_threshold = atoi(*argv);
-			}		
-		}
-		else if(strcmp(*argv,"level") == 0){
-			argc--;
-			argv++;
-			sp->threshold = atoi(*argv);
-			argc--;
-			argv++;
-			if(atoi(*argv) != NULL){
-				sp->low_threshold = atoi(*argv);
-			}	
 		}
 		else{
 			fprintf(stderr,
