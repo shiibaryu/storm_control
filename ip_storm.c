@@ -18,9 +18,9 @@
 #include "ip_common.h"
 
 
-#define CMD_SIZE 						6
-#define device_name_max 				10
-#define traffic_name_max 				15
+#define CMD_SIZE 			6
+#define device_name_max 		10
+#define traffic_name_max 		15
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
