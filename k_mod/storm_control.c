@@ -40,8 +40,8 @@ MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
-#define PPS				    0x0001
-#define BPS				    0x0002
+#define PPS				0x0001
+#define BPS			        0x0002
 #define LEVEL				0x0004
 #define TIMER_TIMEOUT_SECS    	        1
 
@@ -377,11 +377,14 @@ static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 			.len = sizeof(struct storm_param) },
 };
 
-static struct genl_ops storm_nl_ops = {
-	.cmd	= STORM_CMD_ADD,
-	.doit	= storm_nl_add,
-	.policy	= storm_nl_policy,
-	.flags	= GENL_ADMIN_PERM,
+static struct genl_ops storm_nl_ops[] = {
+    {
+            .cmd	= STORM_CMD_ADD,
+	    .doit	= storm_nl_add,
+	    .policy	= storm_nl_policy,
+	    .flags	= GENL_ADMIN_PERM,
+
+    },
 };
 
 static struct genl_family storm_nl_family = {
@@ -391,6 +394,7 @@ static struct genl_family storm_nl_family = {
 	.hdrsize	= 0,
 	.netnsok	= true,
 	.ops		= storm_nl_ops,
+    	.n_ops      	= ARRAY_SIZE(storm_nl_ops);
 	.module		= THIS_MODULE,
 };
 
