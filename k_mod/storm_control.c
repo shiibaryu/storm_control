@@ -40,8 +40,8 @@ MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
 #define FLAG_DOWN			0x0002
-#define PPS				0x0001
-#define BPS				0x0002
+#define PPS				    0x0001
+#define BPS				    0x0002
 #define LEVEL				0x0004
 #define TIMER_TIMEOUT_SECS    	        1
 
@@ -58,7 +58,7 @@ struct storm_control_dev{
 	int low_threshold;
 	u16 pbl_type; /*flag to specify pps or bps or level*/
 	u16 reg_flag; /*specify whethere generic netlink was registere or not*/
-    	u16 d_flag; /*drop_flag*/
+    u16 d_flag; /*drop_flag*/
 	u16 f_flag; /*first time or not*/
 	u16 t_type; /* user specified traffic type*/
 };
@@ -377,7 +377,7 @@ static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 			.len = sizeof(struct storm_param) },
 };
 
-static struct genl_ops storm_nl_ops[] = {
+static struct genl_ops storm_nl_ops = {
 	.cmd	= STORM_CMD_ADD,
 	.doit	= storm_nl_add,
 	.policy	= storm_nl_policy,
@@ -391,7 +391,6 @@ static struct genl_family storm_nl_family = {
 	.hdrsize	= 0,
 	.netnsok	= true,
 	.ops		= storm_nl_ops,
-	.n_ops		= ARRAY_SIZE(storm_nl_ops),
 	.module		= THIS_MODULE,
 };
 
