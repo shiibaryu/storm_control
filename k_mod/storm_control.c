@@ -394,7 +394,7 @@ static struct genl_family storm_nl_family = {
 	.hdrsize	= 0,
 	.netnsok	= true,
 	.ops		= storm_nl_ops,
-    	.n_ops      	= ARRAY_SIZE(storm_nl_ops);
+    	.n_ops      	= ARRAY_SIZE(storm_nl_ops),
 	.module		= THIS_MODULE,
 };
 
