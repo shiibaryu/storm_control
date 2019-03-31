@@ -29,8 +29,8 @@ enum {
 /*genl attrs*/
 struct storm_param{
 	char *dev;
-	u16  traffic_type;
-	u16  control_type;
+	unsigned short traffic_type;
+	unsigned short control_type;
 	int  threshold;
 	int  low_threshold;
 }__attribute__((__packed__));
