@@ -146,7 +146,7 @@ static int send_msg_kernel(int argc,char **argv)
 	return 0;
 }
 
-int main(int argc, char *argv){
+int main(int argc, char **argv){
 
 	int ret;
 
@@ -158,7 +158,7 @@ int main(int argc, char *argv){
 		exit(-1);
 	}
 	
-	ret = send_msg_kernel(argc,*argv);
+	ret = send_msg_kernel(argc,argv);
 	if(ret < 0){
 		printf("failed to send msg to kernel.");
 		return -1;
