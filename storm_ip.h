@@ -23,8 +23,8 @@ enum {
 };
 #define STORM_CMD_MAX	(__STORM_CMD_MAX - 1)
 
-#define CMD_SIZE 						6
-#define traffic_name_max 				15
+#define CMD_SIZE 		6
+#define traffic_name_max 	15
 
 /*genl attrs*/
 struct storm_param{
