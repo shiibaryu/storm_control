@@ -384,7 +384,7 @@ static struct genl_ops storm_nl_ops = {
 	.flags	= GENL_ADMIN_PERM,
 };
 
-static struct genl_family storm_nl_family = {
+static struct genl_family storm_nl_family[] = {
 	.name		= STORM_GENL_NAME,
 	.version	= STORM_GENL_VERSION,
 	.maxattr	= STORM_ATTR_MAX,
