@@ -148,7 +148,7 @@ static int send_msg_kernel(int argc,char **argv)
 
 int main(int argc, char *argv){
 
-	int rec;
+	int ret;
 
 	if (argc < 1 || !matches(*argv, "help")){
 		usage();
