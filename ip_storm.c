@@ -25,9 +25,9 @@
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
-#define PPS								0x0001
-#define BPS								0x0002
-#define LEVEL							0x0004
+#define PPS				0x0001
+#define BPS				0x0002
+#define LEVEL				0x0004
 
 static struct rtnl_handle genl_rth;
 static int genl_family = -1;
