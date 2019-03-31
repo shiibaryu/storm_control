@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <asm/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -28,15 +29,8 @@
 #define BPS								0x0002
 #define LEVEL							0x0004
 
-struct storm_param{
-	char *dev;
-	u16  traffic_type;
-	u16  control_type;
-	int  threshold;
-	int  low_threshold;
-}__attribute__((__packed__));
-
 static struct rtnl_handle genl_rth;
+static int genl_family = -1;
 
 void usage(void){
 	fprintf(stderr,
@@ -66,17 +60,15 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 		if(strcmp(*argv,"ip") == 0){
 			argc--;
 			argv++;
-			/*NEXT_ARG();*/
 		}
 		else if(strcmp(*argv,"storm") == 0){
 			argc--;
 			argv++;
-			/*NEXT_ARG();*/
 		}
 		else if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
-			strncpy(sp->dev,argv,sizeof(argv));
+			strncpy(sp->dev,*argv,sizeof(argv));
 		}
 		else if(strcmp(*argv,"type") == 0){
 			argc--;
@@ -98,7 +90,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(atoi(*argv) != NULL){
+			if(argc > 0){
 				sp->low_threshold = atoi(*argv);
 			}
 		}
@@ -109,7 +101,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(atoi(*argv) != NULL){
+			if(argc > 0){
 				sp->low_threshold = atoi(*argv);
 			}		
 		}
@@ -120,7 +112,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			sp->threshold = atoi(*argv);
 			argc--;
 			argv++;
-			if(atoi(*argv) != NULL){
+			if(argc > 0){
 				sp->low_threshold = atoi(*argv);
 			}	
 		}
@@ -166,7 +158,7 @@ int main(int argc, char *argv){
 		exit(-1);
 	}
 	
-	ret = send_msg_kernel(argc,argv);
+	ret = send_msg_kernel(argc,*argv);
 	if(ret < 0){
 		printf("failed to send msg to kernel.");
 		return -1;
@@ -174,34 +166,3 @@ int main(int argc, char *argv){
 
 	return 0;
 }
-
-/*struct nl_sock *sock;
-	struct nl_msg *msg;
-	int family;*/
-
-/*allocate a new netlink socket*/
-	/*sock = nl_socket_alloc();
-	if(!sock) {
-		fprintf(stderr, "Unable to alloc nl socket!\n");
-		exit(EXIT_FAILURE);
-	}*/
-
-	/*Connect to generic netlink socket on kernel side*/
-	/*if (genl_connect(sock)) {
-		fprintf(stderr, "Unable to connect to genl!\n");
-		goto exit_err;
-	}
-
-	family = genl_ctrl_resolve(sock,);
-
-	msg = nlmsg_alloc();
-	if(!genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, family_id, 0, NLM_F_REQUEST, GENL_TEST_C_MSG, 0)) {
-		fprintf(stderr, "failed to put nl hdr!\n");
-		err = -ENOMEM;
-		goto out;
-
-			out:
-	nlmsg_free(msg);
-	return err;
-	}*/
-	
