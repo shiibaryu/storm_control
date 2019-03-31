@@ -13,13 +13,13 @@
 #include <netlink/genl/ctrl.h>
 #endif
 
-#define STORM_GENL_NAME	"storm_ctl"
+#define STORM_GENL_NAME	"storm_control"
 #define STORM_GENL_VERSION	0x00
 
 /* genl commands */
 enum {
-	STORM_CMD_ADD_ENDPOINT,
-	__AF_GRAFT_CMD_MAX,
+	STORM_CMD_ADD,
+	__STORM_CMD_MAX,
 };
 #define STORM_CMD_MAX	(__STORM_CMD_MAX - 1)
 
@@ -30,7 +30,7 @@ enum {
 struct storm_param{
 	char *dev;
 	u16  traffic_type;
-	char control_type[6];
+	u16  control_type;
 	int  threshold;
 	int  low_threshold;
 }__attribute__((__packed__));
