@@ -21,9 +21,6 @@
 #include "ip_common.h"
 #include "namespace.h"
 
-#define CMD_SIZE 						6
-#define device_name_max 				10
-#define traffic_name_max 				15
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
@@ -32,8 +29,8 @@
 #define LEVEL							0x0004
 
 struct storm_param{
-	char dev[device_name_max];
-	u16  traffic_type[traffic_name_max];
+	char *dev;
+	u16  traffic_type;
 	u16  control_type;
 	int  threshold;
 	int  low_threshold;
@@ -139,16 +136,16 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 
 static int send_msg_kernel(int argc,char **argv)
 {
-	struct storm_param ps;
+	struct storm_param sp;
 
-	if(parse_args(argc,argv,&ps) < 0){
+	if(parse_args(argc,argv,&sp) < 0){
 		return -1;
 	}
 
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
-		     STORM_CMD_ADD_ENDPOINT, NLM_F_REQUEST | NLM_F_ACK);
+		     STORM_CMD_ADD, NLM_F_REQUEST | NLM_F_ACK);
 	
-	addattr_l(&req.n,1024,STORM_ATTR_ENDPOINT,&ps,sizeof(ps));
+	addattr_l(&req.n,1024,STORM_ATTR,&sp,sizeof(sp));
 
 	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
 			return -2;
