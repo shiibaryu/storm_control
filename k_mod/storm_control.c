@@ -76,7 +76,7 @@ static DEFINE_MUTEX(cpu_mutex);
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
 
-static int pps_total_cpu_packet()
+static int pps_total_cpu_packet(void)
 {
 	int cpu=0;
 	int total_packet = 0;
@@ -84,7 +84,7 @@ static int pps_total_cpu_packet()
 	/*read_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		total_packet += per_cpu(pps,cpu);
+		total_packet += per_cpu(pc_packet,cpu);
 	}
 	mutex_unlock(&cpu_mutex);
 	/*read_unlock();*/
@@ -92,7 +92,7 @@ static int pps_total_cpu_packet()
 	return total_packet;
 }
 
-static unsigned int bps_total_cpu_bit()
+static unsigned int bps_total_cpu_bit(void)
 {
 	int cpu=0;
 	unsigned int total_bit = 0;
@@ -100,7 +100,7 @@ static unsigned int bps_total_cpu_bit()
 	/*read_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		total_bit += per_cpu(bps,cpu);
+		total_bit += per_cpu(pc_bit,cpu);
 	}
 	mutex_unlock(&cpu_mutex);
 	/*read_unlock();*/
@@ -108,25 +108,25 @@ static unsigned int bps_total_cpu_bit()
 	return total_bit;
 }
 
-static void initialize_pps_counter()
+static void initialize_pps_counter(void)
 {
 	int cpu=0;
 		/*write_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		per_cpu(pps,cpu) = 0;
+		per_cpu(pc_packet,cpu) = 0;
 	}
 	mutex_unlock(&cpu_mutex);
 		/*write_unlock();*/
 }
 
-static void initialize_bps_counter()
+static void initialize_bps_counter(void)
 {
 	int cpu=0;
 		/*write_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		per_cpu(bps,cpu) = 0;
+		per_cpu(pc_bit,cpu) = 0;
 	}
 	mutex_unlock(&cpu_mutex);
 		/*write_unlock();*/
