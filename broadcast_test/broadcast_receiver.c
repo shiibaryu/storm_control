@@ -102,6 +102,7 @@ int
 main(int argc, char *argv[])
 {
     int rc = 0;
+    int i;
     struct broadcast_info info;
 
     rc = initialize(argc, argv, &info);
@@ -110,10 +111,12 @@ main(int argc, char *argv[])
         return -1;
     }   
 
-    rc = broadcast_receiver(&info);
-    if(rc != 0){ 
-        fprintf(stderr, "Error: failed to broadcast_receive.\n");
-        return -1;
+    for(i=0;i<10;i++){
+        rc = broadcast_receiver(&info);
+        if(rc != 0){ 
+            fprintf(stderr, "Error: failed to broadcast_receive.\n");
+            return -1;
+        }
     }
 
     return 0;

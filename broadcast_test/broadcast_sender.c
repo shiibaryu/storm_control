@@ -64,7 +64,6 @@ broadcast_sendmsg(struct broadcast_info *info)
             fprintf(stderr,"rudp_sendto:sendto failed\n");
             return -1;
         }
-        /*sleep(5);*/
     }
 
     return 0;
@@ -92,7 +91,7 @@ static int
 initialize(int argc, char *argv[], struct broadcast_info *info)
 {
     if(argc != 4){
-        printf("Usage: <ip-addr> <port> <msg>");
+        printf("Usage: <ip-addr> <port> <msg>\n");
         return(-1);
     }
 
