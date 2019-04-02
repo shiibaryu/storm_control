@@ -59,7 +59,7 @@ module_param(low_threshold,int,0664);
 struct storm_control_dev{
 	struct net_device *dev;
 	int p_counter;
-    	u16 d_flag; /*drop_flag*/
+    u16 d_flag; /*drop_flag*/
 	u16 f_flag; /*first time or not*/
 	u16 t_type; /* user specified traffic type*/
 };
