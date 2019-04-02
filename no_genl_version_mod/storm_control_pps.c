@@ -59,7 +59,7 @@ module_param(low_threshold,int,0664);
 struct storm_control_dev{
 	struct net_device *dev;
 	int p_counter;
-    	u16 d_flag; /*drop_flag*/
+    u16 d_flag; /*drop_flag*/
 	u16 f_flag; /*first time or not*/
 	u16 t_type; /* user specified traffic type*/
 };
@@ -108,7 +108,7 @@ static void threshold_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
@@ -116,14 +116,14 @@ static void threshold_check(void){
     }
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "Packet was accepted .\n");
     }
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
 		sc_dev.p_counter = 0;
-	    	initialize_cpu_counter(pc_packet);
+	    	initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    	printk(KERN_INFO "Dropping packet continues.\n");
@@ -131,7 +131,7 @@ static void threshold_check(void){
     else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
 	    	sc_dev.d_flag = FLAG_DOWN;
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
@@ -257,7 +257,7 @@ __init stctl_init_module(void)
         int ret = 0;
 
 	memset(&sc_dev,0,sizeof(sc_dev));
-    	initialize_cpu_counter(pc_packet);
+    	initialize_cpu_counter();
 
 	init_timer(&sc_timer);
 	sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
