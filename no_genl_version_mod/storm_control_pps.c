@@ -76,7 +76,7 @@ static DEFINE_MUTEX(cpu_mutex);
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
 
-static int total_cpu_packet(int tcp)
+static int total_cpu_packet(void)
 {
 	int cpu=0;
 	int total_packet = 0;
@@ -84,7 +84,7 @@ static int total_cpu_packet(int tcp)
 	/*read_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		total_packet += per_cpu(tcp,cpu);
+		total_packet += per_cpu(pc_packet,cpu);
 	}
 	mutex_unlock(&cpu_mutex);
 	/*read_unlock();*/
@@ -92,13 +92,13 @@ static int total_cpu_packet(int tcp)
 	return total_packet;
 }
 
-static void initialize_cpu_counter(int pcp)
+static void initialize_cpu_counter(void)
 {
 	int cpu=0;
 		/*write_lock();*/
 	mutex_lock(&cpu_mutex);
 	for_each_present_cpu(cpu){
-		per_cpu(pcp,cpu) = 0;
+		per_cpu(pc_packet,cpu) = 0;
 	}
 	mutex_unlock(&cpu_mutex);
 		/*write_unlock();*/
@@ -108,7 +108,7 @@ static void threshold_check(void){
 	if(sc_dev.p_counter >= threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.d_flag = FLAG_UP;
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
 	    	printk(KERN_INFO "--------Blocking started--------\n");
@@ -116,14 +116,14 @@ static void threshold_check(void){
     }
     else if(sc_dev.p_counter < threshold && (sc_dev.d_flag & FLAG_DOWN)){
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "Packet was accepted .\n");
     }
     else if(sc_dev.p_counter >= low_threshold && (sc_dev.d_flag & FLAG_UP)){
 		sc_dev.p_counter = 0;
-	    	initialize_cpu_counter(pc_packet);
+	    	initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
 	    	printk(KERN_INFO "Dropping packet continues.\n");
@@ -131,7 +131,7 @@ static void threshold_check(void){
     else if(sc_dev.p_counter < low_threshold && (sc_dev.d_flag & FLAG_UP)){
 	    	sc_dev.d_flag = FLAG_DOWN;
 		sc_dev.p_counter = 0;
-		initialize_cpu_counter(pc_packet);
+		initialize_cpu_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
 	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
@@ -142,7 +142,7 @@ static void check_packet(unsigned long data)
 {
 	printk(KERN_INFO "--------One Second passed--------\n");
 	sc_dev.p_counter = 0;
-	sc_dev.p_counter = total_cpu_packet(pc_packet);
+	sc_dev.p_counter = total_cpu_packet();
     	threshold_check();
 }
 
@@ -257,7 +257,7 @@ __init stctl_init_module(void)
         int ret = 0;
 
 	memset(&sc_dev,0,sizeof(sc_dev));
-    	initialize_cpu_counter(pc_packet);
+    	initialize_cpu_counter();
 
 	init_timer(&sc_timer);
 	sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
