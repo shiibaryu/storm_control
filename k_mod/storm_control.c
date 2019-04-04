@@ -63,6 +63,7 @@ struct storm_control_dev{
 
 	struct net_device *dev;
 	struct pbl_counter *pblc;
+	char *if_name;
 	int threshold;
 	int low_threshold;
 	u16 pbl_type; /*flag to specify pps or bps or level*/
@@ -393,7 +394,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 	struct storm_control_dev *sc_dev;
 
 	list_for_each_entry_rcu(sc_dev,&storm->list,list){
-		if(sc_dev->dev == dev_get_by_name(&init_net,dev)){
+		if(strncmp(sc_dev->if_name,dev,STORM_EPNAME_MAX)==0){
 			return sc_dev;
 		}
 	}
@@ -418,11 +419,12 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 
 	if (IS_ERR(sc_net)) {
 		pr_debug("%s: invalid netns\n", __func__);
-		kfree(ep);
-		return PTR_ERR(ep_net);
+		kfree(sc_dev);
+		return PTR_ERR(sc_net);
 	}
 	sc_dev->net = sc_net;
 
+	sc_dev->if_name = sp->dev;
 	sc_dev->dev = dev_get_by_name(&init_net,sp->dev);
 	if (!sc_dev->dev){
 		return -1;
@@ -479,7 +481,7 @@ static void storm_del_if(struct storm_control_dev *sc_dev)
 {
 	put_net(sc_dev->net);
 	dev_put(sc_dev->dev);
-	list_dev_rcu(&sc_dev->list);
+	list_del_rcu(&sc_dev->list);
 	kfree_rcu(sc_dev,rcu);
 }
 
@@ -563,14 +565,12 @@ static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
 
 	if (!info->attrs[STORM_ATTR]){
 		return -EINVAL;
-
 	}
 
 	nla_memcpy(&sp,info->attrs[STORM_ATTR],sizeof(sp));
 
 	sc_dev = storm_find_if(storm,sp.dev);
 	if(sc_dev){
-		dev_put(sc_dev->dev);
 		return -EEXIST;
 	}
 
@@ -594,7 +594,7 @@ static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info)
 		return -EINVAL;
 	}
 
-	nla_memcpy(&sp, info->attrs[STORM_ATTR_IF],
+	nla_memcpy(&sp,info->attrs[STORM_ATTR_IF],
 		   sizeof(sp));
 	
 	sc_dev = storm_find_if(storm,sp.dev);
@@ -606,8 +606,6 @@ static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info)
 
 	return 0;
 }
-
-
     
 static int 
 __init stctl_init_module(void)
