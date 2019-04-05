@@ -653,10 +653,6 @@ __init stctl_init_module(void)
 
 	memset(&sc_dev,0,sizeof(sc_dev));
 
-
-	initialize_pps_counter();
-	initialize_bps_counter();
-
 	init_timer(&sc_timer);
 	/*sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
 	sc_timer.data = 0;
