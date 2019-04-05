@@ -74,7 +74,7 @@ struct storm_control_dev{
 };
 /*static struct storm_control_dev sc_dev;*/
 
-struct timer_list sc_timer;
+static struct timer_list sc_timer;
 
 /* per netnamespace parameters*/
 static unsigned int storm_net_id;
@@ -145,84 +145,86 @@ static void initialize_bps_counter(void)
 		/*write_unlock();*/
 }
 
-static void pps_threshold_check(void){
-	if(sc_dev.pblc->pps_counter >= sc_dev.threshold && (sc_dev.d_flag & FLAG_DOWN)){
-		sc_dev.d_flag = FLAG_UP;
-		sc_dev.pblc->pps_counter = 0;
+static void pps_threshold_check(struct storm_control_dev *sc_dev){
+	if(sc_dev->pblc->pps_counter >= sc_dev->threshold && (sc_dev.d_flag & FLAG_DOWN)){
+		sc_dev->d_flag = FLAG_UP;
+		sc_dev->pblc->pps_counter = 0;
 		initialize_pps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
-	    	printk(KERN_INFO "--------Blocking started--------\n");
-	    	printk(KERN_INFO "Packet was dropped .\n");
-    }
-    else if(sc_dev.pblc->pps_counter < sc_dev.threshold && (sc_dev.d_flag & FLAG_DOWN)){
-		sc_dev.pblc->pps_counter = 0;
+	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Packet was dropped at %s.\n");
+    	}
+    else if(sc_dev->pblc->pps_counter < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
+	    	sc_dev->f_flag = FLAG_UP;
+		sc_dev->pblc->pps_counter = 0;
 		initialize_pps_counter();
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
-	    	printk(KERN_INFO "Packet was accepted .\n");
-    }
-    else if(sc_dev.pblc->pps_counter >= sc_dev.low_threshold && (sc_dev.d_flag & FLAG_UP)){
-		sc_dev.pblc->pps_counter = 0;
+	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Packet was accepted at %s.\n",sc_dev->if_name);
+    	}	
+    else if(sc_dev->pblc->pps_counter >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
+		sc_dev->pblc->pps_counter = 0;
 	    	initialize_pps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
-	    	printk(KERN_INFO "Dropping packet continues.\n");
-    }
-    else if(sc_dev.pblc->pps_counter < sc_dev.low_threshold && (sc_dev.d_flag & FLAG_UP)){
-	    	sc_dev.d_flag = FLAG_DOWN;
-		sc_dev.pblc->pps_counter = 0;
+	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
+    	}
+    else if(sc_dev->pblc->pps_counter < sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
+	    	sc_dev->f_flag = FLAG_UP;
+	    	sc_dev->d_flag = FLAG_DOWN;
+		sc_dev->pblc->pps_counter = 0;
 		initialize_pps_counter();
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
-	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
-    }
+	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "--------Packet blocking at %s ended.--------\n",sc_dev->if_name);
+    	}
 }
 
-static void bps_threshold_check(void){
-	if(sc_dev.pblc->bps_counter >= sc_dev.threshold && (sc_dev.d_flag & FLAG_DOWN)){
-		sc_dev.d_flag = FLAG_UP;
-		sc_dev.pblc->bps_counter = 0;
+static void bps_threshold_check(struct storm_control_dev *sc_dev){
+	if(sc_dev->pblc->bps_counter >= sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
+		sc_dev->d_flag = FLAG_UP;
+		sc_dev->pblc->bps_counter = 0;
 		initialize_bps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet per second was more than the threthold.\n");
-	    	printk(KERN_INFO "--------Blocking started--------\n");
-	    	printk(KERN_INFO "Packet was dropped .\n");
-    }
-    else if(sc_dev.pblc->bps_counter < sc_dev.threshold && (sc_dev.d_flag & FLAG_DOWN)){
-		sc_dev.pblc->bps_counter = 0;
+	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->if_name);
+    	}
+    else if(sc_dev->pblc->bps_counter < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
+		sc_dev->pblc->bps_counter = 0;
 		initialize_bps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet pakcet per second was less than the threthold.\n");
-	    	printk(KERN_INFO "Packet was accepted .\n");
-    }
-    else if(sc_dev.pblc->bps_counter >= sc_dev.low_threshold && (sc_dev.d_flag & FLAG_UP)){
-		sc_dev.pblc->bps_counter = 0;
+	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Packet was accepted at %s.\n",sc_dev->if_name);
+    	}
+    else if(sc_dev->pblc->bps_counter >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
+		sc_dev->pblc->bps_counter = 0;
 	    	initialize_bps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet pakcet per second was more than the lowthrethold.\n");
-	    	printk(KERN_INFO "Dropping packet continues.\n");
-    }
-    else if(sc_dev.pblc->bps_counter < sc_dev.low_threshold && (sc_dev.d_flag & FLAG_UP)){
-	    	sc_dev.d_flag = FLAG_DOWN;
-		sc_dev.pblc->bps_counter = 0;
+	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
+    	}
+    else if(sc_dev->pblc->bps_counter < sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
+	    	sc_dev->d_flag = FLAG_DOWN;
+		sc_dev->pblc->bps_counter = 0;
 		initialize_bps_counter();
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
-	    	printk(KERN_INFO "Packet per second was less than the threthold.\n");
-	    	printk(KERN_INFO "--------Packet blocking ended.--------\n");
-    }
+	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
+	    	printk(KERN_INFO "--------Packet blocking ended at %s.--------\n",sc_dev->if_name);
+    	}
 }
 
 static void check_packet(unsigned long data)
 {
+	struct storm_control_dev *sc_dev = (struct storm_control_dev *)data;
+
 	printk(KERN_INFO "--------One Second passed--------\n");
-	if(sc_dev.pbl_type & PPS){
-		sc_dev.pblc->pps_counter = pps_total_cpu_packet();
-    		pps_threshold_check();
+	if(sc_dev->pbl_type & PPS){
+		sc_dev->pblc->pps_counter = pps_total_cpu_packet();
+    		pps_threshold_check(sc_dev);
 	}
-	else if(sc_dev.pbl_type & BPS){
-		sc_dev.pblc->bps_counter = bps_total_cpu_bit();
-    		bps_threshold_check();
+	else if(sc_dev->pbl_type & BPS){
+		sc_dev->pblc->bps_counter = bps_total_cpu_bit();
+    		bps_threshold_check(sc_dev);
 	}
 }
 
@@ -254,131 +256,148 @@ storm_hook(
         struct sk_buff *skb,
         const struct nf_hook_state *state)
 {       
+	struct storm_control_dev *sc_dev;
+
 	if(!skb){
             return NF_ACCEPT;
         }
 
-	if(sc_dev.reg_flag & FLAG_DOWN){
-		return NF_ACCEPT;
-	}
+	/*net = get_net(&init_net);*/
+	struct net *net = sock_net(skb->sk);
+	struct storm_net *storm = net_generic(net,storm_net_id);
 
-        if(skb->dev == sc_dev.dev){
-	    /*Broadcast processing*/
-	    	if(skb->pkt_type == PACKET_BROADCAST && (sc_dev.t_type & TRAFFIC_TYPE_BROADCAST)){
-	    		if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
-					sc_dev.f_flag = FLAG_DOWN;
-					printk(KERN_INFO "First broadcast packet was arrived.\n");
+	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
+		if(skb->dev == sc_dev->dev){
+	    		/*Broadcast processing*/
+	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->t_type & TRAFFIC_TYPE_BROADCAST)){
+	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
+					sc_dev->f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->if_name);
 					printk(KERN_INFO "One second timer started.\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
-					if(sc_dev.pbl_type & PPS){
+
+					if(sc_dev->pbl_type & PPS){
 						this_cpu_inc(pc_packet);
 						return NF_ACCEPT;
 					}
-					else if(sc_dev.pbl_type & BPS){
+					else if(sc_dev->pbl_type & BPS){
 						this_cpu_add(pc_bit,skb->len);
 						return NF_ACCEPT;
 					}
-	    		}
-			else if(sc_dev.d_flag & FLAG_DOWN){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
+	    			}
+				else if(sc_dev->d_flag & FLAG_DOWN){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
 				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-			}
-			else if(sc_dev.d_flag & FLAG_UP){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-			}
-		}
-	    	else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev.t_type & TRAFFIC_TYPE_MULTICAST)){
-	    		if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
-				sc_dev.f_flag = FLAG_DOWN;
-				printk(KERN_INFO "First multicast packet was arrived.\n");
-				printk(KERN_INFO "--------One second timer started--------\n");
-				add_timer(&sc_timer);
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-	    		}
-			else if(sc_dev.d_flag & FLAG_DOWN){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
+				else if(sc_dev->d_flag & FLAG_UP){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
 				}
 			}
-			else if(sc_dev.d_flag & FLAG_UP){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
+	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->t_type & TRAFFIC_TYPE_MULTICAST)){
+	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
+					sc_dev->f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->if_name);
+					printk(KERN_INFO "--------One second timer started--------\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.function = check_packet;
+					add_timer(&sc_timer);
+
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->d_flag & FLAG_DOWN){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
 				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-			}
-		}
-		else if((route4_input(skb) == -1) && (sc_dev.t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
-			if((sc_dev.f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
-				sc_dev.f_flag = FLAG_DOWN;
-				printk(KERN_INFO "First unknown unicast packet was arrived.\n");
-				printk(KERN_INFO "--------One second timer started--------\n");
-				add_timer(&sc_timer);
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-	    		}
-			else if(sc_dev.d_flag & FLAG_DOWN){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
-				}
-			}
-			else if(sc_dev.d_flag & FLAG_UP){
-				if(sc_dev.pbl_type & PPS){
-					this_cpu_inc(pc_packet);
-					return NF_ACCEPT;
-				}
-				else if(sc_dev.pbl_type & BPS){
-					this_cpu_add(pc_bit,skb->len);
-					return NF_ACCEPT;
+				else if(sc_dev->d_flag & FLAG_UP){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
 				}
 			}
-		}
-		else{
-			return NF_ACCEPT;
+			else if((route4_input(skb) == -1) && (sc_dev->t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+				if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
+					sc_dev->f_flag = FLAG_DOWN;
+					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->if_name);
+					printk(KERN_INFO "--------One second timer started--------\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.function = check_packet;
+					add_timer(&sc_timer);
+					
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->d_flag & FLAG_DOWN){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->d_flag & FLAG_UP){
+					if(sc_dev->pbl_type & PPS){
+						this_cpu_inc(pc_packet);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->pbl_type & BPS){
+						this_cpu_add(pc_bit,skb->len);
+						return NF_ACCEPT;
+					}
+				}
+			}
+			else{
+				return NF_ACCEPT;
+			}
 		}
 	}
-	else{
-		return NF_ACCEPT;
-	}
+
 	return NF_ACCEPT;
 }
 
@@ -405,7 +424,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 {
 	bool found = false;
-	struct net *sc_net;
+	struct net *net;
 	struct storm_control_dev *sc_dev,*next;
 
 	sc_dev = (struct storm_control_dev *)kmalloc(sizeof(struct storm_control_dev),
@@ -415,14 +434,14 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 		return -ENOMEM;
 	}
 	memset(sc_dev,0,sizeof(sc_dev));
-	sc_net = get_net(&init_net);
+	net = get_net(&init_net);
 
-	if (IS_ERR(sc_net)) {
+	if (IS_ERR(net)) {
 		pr_debug("%s: invalid netns\n", __func__);
 		kfree(sc_dev);
-		return PTR_ERR(sc_net);
+		return PTR_ERR(net);
 	}
-	sc_dev->net = sc_net;
+	sc_dev->net = net;
 
 	sc_dev->if_name = sp->dev;
 	sc_dev->dev = dev_get_by_name(&init_net,sp->dev);
@@ -451,6 +470,12 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
         else{
             printk(KERN_INFO "this traffic type could not be registered.\n");
         }
+
+	/*
+	sc_dev->pblc->pps_counter = alloc_percpu(int);
+	sc_dev->pblc->bps_counter = alloc_percpu(unsigned int);
+	sc_dev->pblc->level_counter = alloc_percpu(unsigned int);
+	*/
 
 	sc_dev->pbl_type = sp->control_type;
 
@@ -492,7 +517,7 @@ static __net_init int storm_init_net(struct net *net)
 	storm->net = net;
 	INIT_LIST_HEAD(&storm->if_list);
 
-	return;
+	return 0;
 }
 
 static __net_exit void storm_exit_net(struct net *net)
@@ -619,11 +644,10 @@ __init stctl_init_module(void)
 	initialize_pps_counter();
 	initialize_bps_counter();
 
-
 	init_timer(&sc_timer);
-	sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+	/*sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
 	sc_timer.data = 0;
-	sc_timer.function = check_packet;
+	sc_timer.function = check_packet;*/
 
 	ret = register_pernet_subsys(&storm_net_ops);
 	if(ret){
