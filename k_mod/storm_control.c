@@ -493,7 +493,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 	}	
 
 	list_for_each_entry_rcu(next,&storm->if_list,list){
-		if(strncmp(sc_dev->dev,next->dev,sizeof(struct net_device))<0){
+		if(sc_dev->dev == next->dev){
 			found = true;
 			break;
 		}
@@ -555,7 +555,7 @@ static struct pernet_operations storm_net_ops = {
 	.exit = storm_exit_net,
 	.id   = &storm_net_id,
 	.size = sizeof(struct storm_net),
-}
+};
 
 /* Generic Netlink implementation */
 static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
@@ -622,14 +622,14 @@ static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
 
 }
 
-static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info)
+static int storm_nl_del_if(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net *net = sock_net(skb->sk);
 	struct storm_net *storm = net_generic(net,storm_net_id);
 	struct storm_control_dev *sc_dev;
 	struct storm_param sp;
 
-	if (!info->attrs[STORM_ATTR_ENDPOINT]){
+	if (!info->attrs[STORM_ATTR_IF]){
 		return -EINVAL;
 	}
 
