@@ -257,13 +257,14 @@ storm_hook(
 {       
 	struct storm_control_dev *sc_dev;
 	struct net *net;
+	struct storm_net *storm;
 	if(!skb){
             return NF_ACCEPT;
         }
 
 	/*net = get_net(&init_net);*/
 	net = get_net(&init_net);
-	struct storm_net *storm = net_generic(net,storm_net_id);
+	storm = net_generic(net,storm_net_id);
 
 	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
 		if(skb->dev == sc_dev->dev){
@@ -602,11 +603,11 @@ static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
 	struct storm_control_dev *sc_dev;
 	struct storm_param sp;
 
-	if (!info->attrs[STORM_ATTR]){
+	if (!info->attrs[STORM_ATTR_IF]){
 		return -EINVAL;
 	}
 
-	nla_memcpy(&sp,info->attrs[STORM_ATTR],sizeof(sp));
+	nla_memcpy(&sp,info->attrs[STORM_ATTR_IF],sizeof(sp));
 
 	sc_dev = storm_find_if(storm,sp.dev);
 	if(sc_dev){
