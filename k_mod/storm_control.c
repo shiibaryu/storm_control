@@ -150,22 +150,22 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 	if(sc_dev->pbl_chk.pps_checker >= sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
 		sc_dev->d_flag = FLAG_UP;
 		sc_dev->pbl_chk.pps_checker = 0;
-		initialize_pps_counter();
+		initialize_pps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->if_name);
-	    	printk(KERN_INFO "Packet was dropped at %s.\n");
+	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk.pps_checker < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
 	    	sc_dev->f_flag = FLAG_UP;
 		sc_dev->pbl_chk.pps_checker = 0;
-		initialize_pps_counter();
+		initialize_pps_counter(sc_dev);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Blocking Packet ended at %s.\n",sc_dev->if_name);
     	}	
     else if(sc_dev->pbl_chk.pps_checker >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
 		sc_dev->pbl_chk.pps_checker = 0;
-	    	initialize_pps_counter();
+	    	initialize_pps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
@@ -174,7 +174,7 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 	    	sc_dev->f_flag = FLAG_UP;
 	    	sc_dev->d_flag = FLAG_DOWN;
 		sc_dev->pbl_chk.pps_checker = 0;
-		initialize_pps_counter();
+		initialize_pps_counter(sc_dev);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Packet blocking ended at %s .--------\n",sc_dev->if_name);
     	}
@@ -184,7 +184,7 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 	if(sc_dev->pbl_chk.bps_checker >= sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
 		sc_dev->d_flag = FLAG_UP;
 		sc_dev->pbl_chk.pps_checker = 0;
-		initialize_bps_counter();
+		initialize_bps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->if_name);
@@ -192,13 +192,13 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
     	}
     else if(sc_dev->pbl_chk.bps_checker < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
 		sc_dev->pbl_chk.bps_checker = 0;
-		initialize_bps_counter();
+		initialize_bps_counter(sc_dev);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Blocking packet ended at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk.bps_checker >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
 		sc_dev->pbl_chk.bps_checker = 0;
-	    	initialize_bps_counter();
+	    	initialize_bps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
@@ -206,7 +206,7 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
     else if(sc_dev->pbl_chk.bps_checker < sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
 	    	sc_dev->d_flag = FLAG_DOWN;
 		sc_dev->pbl_chk.bps_checker = 0;
-		initialize_bps_counter();
+		initialize_bps_counter(sc_dev);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Blocking packet ended at %s.--------\n",sc_dev->if_name);
     	}
@@ -310,7 +310,7 @@ storm_hook(
 				}
 			}
 	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->t_type & TRAFFIC_TYPE_MULTICAST)){
-	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev.d_flag & FLAG_DOWN)){
+	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
 					sc_dev->f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");
@@ -411,7 +411,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 {
 	struct storm_control_dev *sc_dev;
 
-	list_for_each_entry_rcu(sc_dev,&storm->list,list){
+	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
 		if(strncmp(sc_dev->if_name,dev,STORM_EPNAME_MAX)==0){
 			return sc_dev;
 		}
@@ -432,7 +432,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 	if(!sc_dev){
 		return -ENOMEM;
 	}
-	memset(sc_dev,0,sizeof(sc_dev));
+	memset(sc_dev,0,sizeof(*sc_dev));
 	net = get_net(&init_net);
 
 	if (IS_ERR(net)) {
@@ -476,19 +476,19 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 		sc_dev->pblc->pps_counter = alloc_percpu(int);
 		if(sc_dev->pblc->pps_counter == NULL){
 			kfree(sc_dev);
-			return NULL;
+			return -1;
 		}
 	}
 	else if(sc_dev->pbl_type & BPS || sc_dev->pbl_type & LEVEL){
 		sc_dev->pblc->bps_counter = alloc_percpu(unsigned int);
 		if(sc_dev->pblc->bps_counter == NULL){
 			kfree(sc_dev);
-			return NULL;
+			return -1;
 		}
 	}
 
 	sc_dev->threshold = sp->threshold;
-	if(sp.low_threshold > 0){
+	if(sp->low_threshold > 0){
 		sc_dev->low_threshold = sp->low_threshold;
 	}	
 
@@ -550,7 +550,7 @@ static __net_exit void storm_exit_net(struct net *net)
 	return;
 }
 
-static struct pernet_operations graft_net_ops = {
+static struct pernet_operations storm_net_ops = {
 	.init = storm_init_net,
 	.exit = storm_exit_net,
 	.id   = &storm_net_id,
@@ -625,19 +625,18 @@ static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
 static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info)
 {
 	struct net *net = sock_net(skb->sk);
-	struct storm_net *storm = net_generic(net,graft_net_id);
-	struct storm_control_dev sc_dev;
+	struct storm_net *storm = net_generic(net,storm_net_id);
+	struct storm_control_dev *sc_dev;
 	struct storm_param sp;
 
-	if (!info->attrs[AF_GRAFT_ATTR_ENDPOINT]){
+	if (!info->attrs[STORM_ATTR_ENDPOINT]){
 		return -EINVAL;
 	}
 
-	nla_memcpy(&sp,info->attrs[STORM_ATTR_IF],
-		   sizeof(sp));
+	nla_memcpy(&sp,info->attrs[STORM_ATTR_IF],sizeof(sp));
 	
 	sc_dev = storm_find_if(storm,sp.dev);
-	if(!ep){
+	if(!sc_dev){
 		return -ENOENT;
 	}
 
@@ -650,8 +649,6 @@ static int
 __init stctl_init_module(void)
 {       
         int ret = 0;
-
-	memset(&sc_dev,0,sizeof(sc_dev));
 
 	init_timer(&sc_timer);
 	/*sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
@@ -694,9 +691,6 @@ module_init(stctl_init_module);
 static void 
 __exit stctl_exit_module(void)
 {
-	if(sc_dev.dev != NULL){
-		dev_put(sc_dev.dev);
-	}
 	nf_unregister_hook(&nf_ops_storm);
 	genl_unregister_family(&storm_nl_family);
 	unregister_pernet_subsys(&storm_net_ops);
