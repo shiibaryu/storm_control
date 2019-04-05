@@ -256,13 +256,13 @@ storm_hook(
         const struct nf_hook_state *state)
 {       
 	struct storm_control_dev *sc_dev;
-
+	struct net *net;
 	if(!skb){
             return NF_ACCEPT;
         }
 
 	/*net = get_net(&init_net);*/
-	struct net *net = sock_net(skb->sk);
+	net = get_net(&init_net);
 	struct storm_net *storm = net_generic(net,storm_net_id);
 
 	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
@@ -562,7 +562,7 @@ static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
 static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
 
 static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
-	[STORM_ATTR] = { .type = NLA_BINARY,
+	[STORM_ATTR_IF] = { .type = NLA_BINARY,
 			.len = sizeof(struct storm_param) },
 };
 
