@@ -33,7 +33,7 @@ static struct rtnl_handle genl_rth;
 static int genl_family = -1;
 
 static void usage(void) __attribute__((noreturn));
-static int do_ipstorm(int argc, char **argv)__attribute__((noreturn));
+static int do_ipstorm(int argc, char **argv);
 
 
 void usage(void)
@@ -134,7 +134,7 @@ static int do_add(int argc, char **argv)
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
 		     STORM_CMD_ADD_IF, NLM_F_REQUEST | NLM_F_ACK);
 	
-	addattr_l(&req.n,1024,STORM_ATTR,&sp,sizeof(sp));
+	addattr_l(&req.n,1024,STORM_ATTR_IF,&sp,sizeof(sp));
 
 	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
 			return -2;
@@ -154,9 +154,9 @@ static int do_del(int argc, char **argv)
 	}
 
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
-		     STORM_CMD_DEL_IF, NLM_F_REQUEST | NLM_F_ACK);
+		     STORM_CMD_DEL_IF,NLM_F_REQUEST | NLM_F_ACK);
 
-	addattr_l(&req.n,1024,STORM_ATTR,&sp,sizeof(sp));
+	addattr_l(&req.n,1024,STORM_ATTR_IF,&sp,sizeof(sp));
 
 	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
 			return -2;
