@@ -16,7 +16,7 @@
 #include <linux/genetlink.h>
 #include <ip_storm.h>
 
-#include <graft.h>
+#include <storm.h>
 
 #include "libgenl.h"
 #include "utils.h"
@@ -32,7 +32,12 @@
 static struct rtnl_handle genl_rth;
 static int genl_family = -1;
 
-void usage(void){
+static void usage(void) __attribute__((noreturn));
+static int do_ipstorm(int argc, char **argv)__attribute__((noreturn));
+
+
+void usage(void)
+{
 	fprintf(stderr,
 		"Usage: ip storm add dev NAME\n"
 		"          type { broadcast | multicast | unknown_unicast }\n"
@@ -162,8 +167,6 @@ static int do_del(int argc, char **argv)
 }
 
 int do_ipstorm(int argc, char **argv){
-
-	int ret;
 
 	if (argc < 1 || !matches(*argv, "help")){
 		usage();
