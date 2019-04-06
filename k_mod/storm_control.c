@@ -31,7 +31,7 @@
 #include <storm.h>
 
 
-MODULE_LICENSE("Debian");
+MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 
@@ -681,9 +681,11 @@ genl_register_failed:
 	nf_unregister_hook(&nf_ops_storm);
 
 register_hook_failed:
-	del_timer(&sc_timer);
+	unregister_pernet_subsys(&storm_net_ops);
 
 netns_failed:
+	del_timer(&sc_timer);
+
         return ret;
 }
 module_init(stctl_init_module);
