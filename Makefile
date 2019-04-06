@@ -1,5 +1,5 @@
 iproute2-src = iproute2-4.19.0/include/
-subdirs = kmod tools $(iproute2-src) 
+subdirs = k_mod tools $(iproute2-src) 
 
 
 all:
