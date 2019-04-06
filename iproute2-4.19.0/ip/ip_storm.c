@@ -16,7 +16,7 @@
 #include <linux/genetlink.h>
 #include <ip_storm.h>
 
-#include <graft.h>
+#include <storm.h>
 
 #include "libgenl.h"
 #include "utils.h"
