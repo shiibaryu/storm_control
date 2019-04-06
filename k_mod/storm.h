@@ -4,8 +4,10 @@
 #define _STORM_H_
 
 #include <linux/netlink.h>
+#include <linux/if.h>		
 
 #define STORM_VERSION "0.0.1"
+#define STORM_EPNAME_MAX	IFNAMSIZ
 
 #ifndef __KERNEL__
 #include <netlink/genl/genl.h>
@@ -18,13 +20,11 @@
 
 /* genl commands */
 enum {
-	STORM_CMD_ADD,
+	STORM_CMD_ADD_IF,
+	STORM_CMD_DEL_IF,
 	__STORM_CMD_MAX,
 };
 #define STORM_CMD_MAX	(__STORM_CMD_MAX - 1)
-
-#define CMD_SIZE 						6
-#define traffic_name_max 				15
 
 /*genl attrs*/
 struct storm_param{
@@ -38,7 +38,7 @@ struct storm_param{
 
 enum {
 	STORM_ATTR_NONE,
-	STORM_ATTR,	
+	STORM_ATTR_IF,	
 	__STORM_ATTR_MAX,
 };
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)

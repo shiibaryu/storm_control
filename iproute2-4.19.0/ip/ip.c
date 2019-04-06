@@ -99,7 +99,7 @@ static const struct cmd {
 	{ "netns",	do_netns },
 	{ "netconf",	do_ipnetconf },
 	{ "vrf",	do_ipvrf},
-	{ "graft",      do_ipgraft },
+	{ "storm",  do_ipstorm },
 	{ "sr",		do_seg6 },
 	{ "help",	do_help },
 	{ 0 }

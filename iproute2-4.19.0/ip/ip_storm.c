@@ -14,13 +14,13 @@
 #include <net/if.h>
 #include <linux/un.h>
 #include <linux/genetlink.h>
+#include <ip_storm.h>
 
-#include <storm.h>
+#include <graft.h>
 
 #include "libgenl.h"
 #include "utils.h"
-#include "ip_common.h"
-#include "namespace.h"
+#include "libnetlink.h"
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
@@ -37,11 +37,11 @@ void usage(void){
 		"Usage: ip storm add dev NAME\n"
 		"          type { broadcast | multicast | unknown_unicast }\n"
 		"          { pps | bps | level } threshold low_threshold\n"
-		/*"\n"
+		"\n"
 		"       ip storm del dev NAME\n"
 		"\n"
 		"       ip storm show\n"
-		"\n"*/
+		"\n"
 		);
 
 	exit(-1);
@@ -57,15 +57,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 	}
 
 	while(argc > 0){
-		if(strcmp(*argv,"ip") == 0){
-			argc--;
-			argv++;
-		}
-		else if(strcmp(*argv,"storm") == 0){
-			argc--;
-			argv++;
-		}
-		else if(strcmp(*argv,"dev") == 0){
+		if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
 			strncpy(sp->dev,*argv,sizeof(argv));
@@ -126,16 +118,16 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 	return 0;
 } 
 
-static int send_msg_kernel(int argc,char **argv)
+static int do_add(int argc, char **argv)
 {
 	struct storm_param sp;
 
-	if(parse_args(argc,argv,&sp) < 0){
+	if(parse_args(argc,argv,&sp)<0){
 		return -1;
 	}
 
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
-		     STORM_CMD_ADD, NLM_F_REQUEST | NLM_F_ACK);
+		     STORM_CMD_ADD_IF, NLM_F_REQUEST | NLM_F_ACK);
 	
 	addattr_l(&req.n,1024,STORM_ATTR,&sp,sizeof(sp));
 
@@ -144,9 +136,32 @@ static int send_msg_kernel(int argc,char **argv)
 	}
 
 	return 0;
+
+
 }
 
-int main(int argc, char **argv){
+static int do_del(int argc, char **argv)
+{
+	struct storm_param sp;
+
+	if(parse_args(argc,argv,&sp)<0){
+		return -1;
+	}
+
+	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
+		     STORM_CMD_DEL_IF, NLM_F_REQUEST | NLM_F_ACK);
+
+	addattr_l(&req.n,1024,STORM_ATTR,&sp,sizeof(sp));
+
+	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
+			return -2;
+	}
+
+	return 0;
+
+}
+
+int do_ipstorm(int argc, char **argv){
 
 	int ret;
 
@@ -158,11 +173,19 @@ int main(int argc, char **argv){
 		exit(-1);
 	}
 	
-	ret = send_msg_kernel(argc,argv);
-	if(ret < 0){
-		printf("failed to send msg to kernel.");
-		return -1;
+	if(matches(*argv,"add") == 0){
+		return do_add(argc - 1, argv + 1);
 	}
+	if(matches(*argv,"del") == 0 ||
+		matches(*argv,"delete") == 0){
+			return do_del(argc - 1 , argv + 1);
+	}
+	/*if(matches(*argv,"show") == 0){
+		return do_show(argc - 1, argv + 1);
+	}*/
 
-	return 0;
+	fprintf(stderr,
+		"Command \"%s\" is unkonw, type \"ip storm help\".\n", *argv);
+
+	exit(-1);
 }

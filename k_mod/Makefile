@@ -1,5 +1,14 @@
-obj-m += storm_control.o
+KERNELSRCDIR := /lib/modules/$(shell uname -r)/build
+BUILD_DIR := $(shell pwd)
+VERBOSE := 0
+
+obj-m := storm_control.o
+
+ccflags-y := -I$(src)/../include/
+
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	echo$(ccflags-y)
+	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) V=$(VERBOSE) modules
+
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) clean
