@@ -5,7 +5,6 @@ VERBOSE := 0
 obj-m := storm_control.o
 
 all:
-	echo$(ccflags-y)
 	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) V=$(VERBOSE) modules
 
 clean:
