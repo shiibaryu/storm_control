@@ -1,4 +1,4 @@
-iproute2-src = iproute2-4.19.0/include/
+iproute2-src = iproute2-4.19.0
 subdirs = k_mod $(iproute2-src) 
 
 
@@ -9,7 +9,7 @@ all:
 	done
 
 install:
-	for i in kmod $(iproute2-src) tools; do \
+	for i in kmod $(iproute2-src); do \
 		echo; echo $$i; \
 		make -C $$i install; \
 	done
