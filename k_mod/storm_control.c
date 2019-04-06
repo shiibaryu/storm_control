@@ -27,9 +27,7 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
-
 #include <storm.h>
-
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");

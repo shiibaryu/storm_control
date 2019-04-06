@@ -14,12 +14,11 @@
 #include <net/if.h>
 #include <linux/un.h>
 #include <linux/genetlink.h>
-#include <ip_storm.h>
-
 #include <storm.h>
 
 #include "libgenl.h"
 #include "utils.h"
+#include "ip_common.h"
 #include "libnetlink.h"
 
 #define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
@@ -32,9 +31,7 @@
 static struct rtnl_handle genl_rth;
 static int genl_family = -1;
 
-static void usage(void) __attribute__((noreturn));
-static int do_ipstorm(int argc, char **argv);
-
+static void usage(void)__attribute__((noreturn));
 
 void usage(void)
 {
