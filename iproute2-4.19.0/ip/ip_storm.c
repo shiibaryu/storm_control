@@ -62,7 +62,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 		if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
-			strncpy(sp->dev,*argv,sizeof(argv));
+			sp->dev = *argv;
 		}
 		else if(strcmp(*argv,"type") == 0){
 			argc--;
@@ -85,6 +85,8 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			argc--;
 			argv++;
 			if(argc > 0){
+				argc--;
+				argv++;
 				sp->low_threshold = atoi(*argv);
 			}
 		}
@@ -96,6 +98,8 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			argc--;
 			argv++;
 			if(argc > 0){
+				argc--;
+				argv++;
 				sp->low_threshold = atoi(*argv);
 			}		
 		}
@@ -107,6 +111,8 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 			argc--;
 			argv++;
 			if(argc > 0){
+				argc--;
+				argv++;
 				sp->low_threshold = atoi(*argv);
 			}	
 		}
@@ -115,6 +121,8 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 				"Error: Invalid argument \"%s\"\n", *argv);
 			usage();
 		}
+		argc--;
+		argv++;
 	}
 
 	return 0;
