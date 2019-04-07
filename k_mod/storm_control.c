@@ -102,7 +102,7 @@ static int pps_total_cpu_packet(struct storm_control_dev *sc_dev)
 	mutex_unlock(&cpu_mutex);
 	/*read_unlock();*/
 
-	return &total_packet;
+	return total_packet;
 }
 
 static unsigned int bps_total_cpu_bit(struct storm_control_dev *sc_dev)
@@ -118,7 +118,7 @@ static unsigned int bps_total_cpu_bit(struct storm_control_dev *sc_dev)
 	mutex_unlock(&cpu_mutex);
 	/*read_unlock();*/
 
-	return &total_bit;
+	return total_bit;
 }
 
 static void initialize_pps_counter(struct storm_control_dev *sc_dev)
@@ -147,8 +147,8 @@ static void initialize_bps_counter(struct storm_control_dev *sc_dev)
 
 static void pps_threshold_check(struct storm_control_dev *sc_dev){
 	if(sc_dev->pbl_chk->pps_checker >= sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
-		*sc_dev->d_flag = FLAG_UP;
-		*sc_dev->pbl_chk->pps_checker = 0;
+		sc_dev->d_flag = FLAG_UP;
+		sc_dev->pbl_chk->pps_checker = 0;
 		initialize_pps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
@@ -156,23 +156,23 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk->pps_checker < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
-	    	*sc_dev->f_flag = FLAG_UP;
-		*sc_dev->pbl_chk->pps_checker = 0;
+	    	sc_dev->f_flag = FLAG_UP;
+		sc_dev->pbl_chk->pps_checker = 0;
 		initialize_pps_counter(sc_dev);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Blocking Packet ended at %s.\n",sc_dev->if_name);
     	}	
     else if(sc_dev->pbl_chk->pps_checker >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
-		*sc_dev->pbl_chk->pps_checker = 0;
+		sc_dev->pbl_chk->pps_checker = 0;
 	    	initialize_pps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk->pps_checker < sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
-	    	*sc_dev->f_flag = FLAG_UP;
-	    	*sc_dev->d_flag = FLAG_DOWN;
-		*sc_dev->pbl_chk->pps_checker = 0;
+	    	sc_dev->f_flag = FLAG_UP;
+	    	sc_dev->d_flag = FLAG_DOWN;
+		sc_dev->pbl_chk->pps_checker = 0;
 		initialize_pps_counter(sc_dev);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Packet blocking ended at %s .--------\n",sc_dev->if_name);
@@ -181,8 +181,8 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 
 static void bps_threshold_check(struct storm_control_dev *sc_dev){
 	if(sc_dev->pbl_chk->bps_checker >= sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
-		*sc_dev->d_flag = FLAG_UP;
-		*sc_dev->pbl_chk->pps_checker = 0;
+		sc_dev->d_flag = FLAG_UP;
+		sc_dev->pbl_chk->pps_checker = 0;
 		initialize_bps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
@@ -190,21 +190,21 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk->bps_checker < sc_dev->threshold && (sc_dev->d_flag & FLAG_DOWN)){
-		*sc_dev->pbl_chk->bps_checker = 0;
+		sc_dev->pbl_chk->bps_checker = 0;
 		initialize_bps_counter(sc_dev);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Blocking packet ended at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk->bps_checker >= sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
-		*sc_dev->pbl_chk->bps_checker = 0;
+		sc_dev->pbl_chk->bps_checker = 0;
 	    	initialize_bps_counter(sc_dev);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->if_name);
     	}
     else if(sc_dev->pbl_chk->bps_checker < sc_dev->low_threshold && (sc_dev->d_flag & FLAG_UP)){
-	    	*sc_dev->d_flag = FLAG_DOWN;
-		*sc_dev->pbl_chk->bps_checker = 0;
+	    	sc_dev->d_flag = FLAG_DOWN;
+		sc_dev->pbl_chk->bps_checker = 0;
 		initialize_bps_counter(sc_dev);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->if_name);
 	    	printk(KERN_INFO "--------Blocking packet ended at %s.--------\n",sc_dev->if_name);
@@ -217,11 +217,11 @@ static void check_packet(unsigned long data)
 
 	printk(KERN_INFO "--------One Second passed--------\n");
 	if(sc_dev->pbl_type & PPS){
-		sc_dev->pbl_chk->pps_checker = pps_total_cpu_packet(sc_dev);
+		*sc_dev->pbl_chk->pps_checker = pps_total_cpu_packet(sc_dev);
     		pps_threshold_check(sc_dev);
 	}
 	else if(sc_dev->pbl_type & BPS){
-		sc_dev->pbl_chk->bps_checker = bps_total_cpu_bit(sc_dev);
+		*sc_dev->pbl_chk->bps_checker = bps_total_cpu_bit(sc_dev);
     		bps_threshold_check(sc_dev);
 	}
 }
