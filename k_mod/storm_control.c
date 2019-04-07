@@ -441,8 +441,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 		return PTR_ERR(net);
 	}
 	sc_dev->net = net;
-
-	strncpy(sc_dev->if_name,sp->dev,STORM_DEVNAME_MAX);
+	sc_dev->if_name= sp->dev;
 
 	sc_dev->dev = dev_get_by_name(&init_net,sp->dev);
 	if (!sc_dev->dev){

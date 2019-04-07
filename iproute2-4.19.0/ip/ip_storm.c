@@ -62,7 +62,7 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 		if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
-			strncpy(sp->dev,*argv,STORM_DEVNAME_MAX);
+			sp->dev = *argv;
 		}
 		else if(strcmp(*argv,"type") == 0){
 			argc--;
