@@ -7,7 +7,7 @@
 #include <linux/if.h>		
 
 #define STORM_VERSION "0.0.1"
-#define STORM_EPNAME_MAX	IFNAMSIZ
+#define STORM_DEVNAME_MAX	IFNAMSIZ
 
 #ifndef __KERNEL__
 #include <netlink/genl/genl.h>

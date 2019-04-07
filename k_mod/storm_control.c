@@ -27,7 +27,9 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
+
 #include <storm.h>
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
@@ -411,7 +413,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 	struct storm_control_dev *sc_dev;
 
 	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
-		if(strncmp(sc_dev->if_name,dev,STORM_EPNAME_MAX)==0){
+		if(strncmp(sc_dev->if_name,dev,STORM_DEVNAME_MAX)==0){
 			return sc_dev;
 		}
 	}
@@ -441,7 +443,8 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 	}
 	sc_dev->net = net;
 
-	sc_dev->if_name = sp->dev;
+	strncpy(sc_dev->if_name,sp->dev,STORM_DEVNAME_MAX);
+
 	sc_dev->dev = dev_get_by_name(&init_net,sp->dev);
 	if (!sc_dev->dev){
 		return -1;
