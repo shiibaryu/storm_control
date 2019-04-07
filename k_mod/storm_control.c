@@ -30,7 +30,6 @@
 
 #include <storm.h>
 
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
@@ -433,7 +432,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_param *sp)
 	if(!sc_dev){
 		return -ENOMEM;
 	}
-	memset(sc_dev,0,sizeof(*sc_dev));
+	memset(sc_dev,0,sizeof(struct storm_control_dev));
 	net = get_net(&init_net);
 
 	if (IS_ERR(net)) {
@@ -652,10 +651,7 @@ __init stctl_init_module(void)
 {       
         int ret = 0;
 
-	init_timer(&sc_timer);
-	/*sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-	sc_timer.data = 0;
-	sc_timer.function = check_packet;*/
+	init_timer(&sc_timer); 
 
 	ret = register_pernet_subsys(&storm_net_ops);
 	if(ret){
@@ -694,11 +690,11 @@ module_init(stctl_init_module);
 
 static void 
 __exit stctl_exit_module(void)
-{
+{	
+	del_timer(&sc_timer);
+	unregister_pernet_subsys(&storm_net_ops);
 	nf_unregister_hook(&nf_ops_storm);
 	genl_unregister_family(&storm_nl_family);
-	unregister_pernet_subsys(&storm_net_ops);
-	del_timer(&sc_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
 module_exit(stctl_exit_module);
