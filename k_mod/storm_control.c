@@ -55,8 +55,8 @@ struct pbl_counter{
 };
 
 struct pbl_checker{
-	int *pps_checker;
-	unsigned int *bps_checker;
+	int pps_checker;
+	unsigned int bps_checker;
 };
 
 struct storm_control_dev{
@@ -217,11 +217,11 @@ static void check_packet(unsigned long data)
 
 	printk(KERN_INFO "--------One Second passed--------\n");
 	if(sc_dev->pbl_type & PPS){
-		*sc_dev->pbl_chk->pps_checker = pps_total_cpu_packet(sc_dev);
+		sc_dev->pbl_chk->pps_checker = pps_total_cpu_packet(sc_dev);
     		pps_threshold_check(sc_dev);
 	}
 	else if(sc_dev->pbl_type & BPS){
-		*sc_dev->pbl_chk->bps_checker = bps_total_cpu_bit(sc_dev);
+		sc_dev->pbl_chk->bps_checker = bps_total_cpu_bit(sc_dev);
     		bps_threshold_check(sc_dev);
 	}
 }
@@ -269,7 +269,7 @@ storm_hook(
 	    		/*Broadcast processing*/
 	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->t_type & TRAFFIC_TYPE_BROADCAST)){
 	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
-					*sc_dev->f_flag = FLAG_DOWN;
+					sc_dev->f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->if_name);
 					printk(KERN_INFO "One second timer started.\n");
 
@@ -310,7 +310,7 @@ storm_hook(
 			}
 	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->t_type & TRAFFIC_TYPE_MULTICAST)){
 	    			if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
-					*sc_dev->f_flag = FLAG_DOWN;
+					sc_dev->f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");
 
@@ -351,7 +351,7 @@ storm_hook(
 			}
 			else if((route4_input(skb) == -1) && (sc_dev->t_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
 				if((sc_dev->f_flag & FLAG_UP) && (sc_dev->d_flag & FLAG_DOWN)){
-					*sc_dev->f_flag = FLAG_DOWN;
+					sc_dev->f_flag = FLAG_DOWN;
 					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");
 
