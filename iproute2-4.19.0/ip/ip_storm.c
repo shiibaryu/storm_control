@@ -50,71 +50,66 @@ void usage(void)
 
 }
 
-static int parse_args(int argc,char **argv,struct storm_param *sp)
+static int parse_args(int argc,char **argv,struct storm_info *s_info)
 {
 	/* ip storm dev ens33 type broadcast pps 14000*/
 
+	memset(s_info,0,sizeof(struct storm_info));
+	
 	if(argc < 1){
 		usage();
 	}
-
+	
 	while(argc > 0){
 		if(strcmp(*argv,"dev") == 0){
 			argc--;
 			argv++;
-			strncpy(sp->dev, *argv, STORM_DEVNAME_MAX);
+			strncpy(s_info->if_name,*argv,STORM_DEVNAME_MAX);
 		}
 		else if(strcmp(*argv,"type") == 0){
 			argc--;
 			argv++;
 			if(strcmp(*argv,"multicast") == 0){
-				sp->traffic_type = TRAFFIC_TYPE_MULTICAST;
+				s_info->traffic_type = TRAFFIC_TYPE_MULTICAST;
+				s_info->first_flag = FLAG_UP;
+				s_info->drop_flag = FLAG_DOWN;
 			}
 			else if(strcmp(*argv,"broadcast") == 0){
-				sp->traffic_type = TRAFFIC_TYPE_BROADCAST;
+				s_info->traffic_type = TRAFFIC_TYPE_BROADCAST;
+				s_info->first_flag = FLAG_UP;
+				s_info->drop_flag = FLAG_DOWN;
 			}		
 			else if(strcmp(*argv,"unknown_unicast") == 0){
-				sp->traffic_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
+				s_info->traffic_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
+				s_info->f_flag = FLAG_UP;
+				s_info->drop_flag = FLAG_DOWN;
 			}
 		}
 		else if(strcmp(*argv,"pps") == 0){
-			sp->control_type = PPS;
+			s_info->pb_type = PPS;
 			argc--;
 			argv++;
-			sp->threshold = atoi(*argv);
+			s_info->threshold = atoi(*argv);
 			argc--;
 			argv++;
 			if(argc > 0){
 				argc--;
 				argv++;
-				sp->low_threshold = atoi(*argv);
+				s_info->low_threshold = atoi(*argv);
 			}
 		}
 		else if(strcmp(*argv,"bps") == 0){
-			sp->control_type = BPS;
+			s_info->pb_type = BPS;
 			argc--;
 			argv++;
-			sp->threshold = atoi(*argv);
+			s_info->thresholsd = atoi(*argv);
 			argc--;
 			argv++;
 			if(argc > 0){
 				argc--;
 				argv++;
-				sp->low_threshold = atoi(*argv);
+				s_info->low_threshold = atoi(*argv);
 			}		
-		}
-		else if(strcmp(*argv,"level") == 0){
-			sp->control_type = LEVEL;
-			argc--;
-			argv++;
-			sp->threshold = atoi(*argv);
-			argc--;
-			argv++;
-			if(argc > 0){
-				argc--;
-				argv++;
-				sp->low_threshold = atoi(*argv);
-			}	
 		}
 		else{
 			fprintf(stderr,
@@ -130,16 +125,16 @@ static int parse_args(int argc,char **argv,struct storm_param *sp)
 
 static int do_add(int argc, char **argv)
 {
-	struct storm_param sp;
+	struct storm_info s_info;
 
-	if(parse_args(argc,argv,&sp)<0){
+	if(parse_args(argc,argv,&s_info)<0){
 		return -1;
 	}
 
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
 		     STORM_CMD_ADD_IF, NLM_F_REQUEST | NLM_F_ACK);
 	
-	addattr_l(&req.n,1024,STORM_ATTR_IF,&sp,sizeof(sp));
+	addattr_l(&req.n,1024,STORM_ATTR_IF,&s_info,sizeof(s_info));
 
 	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
 			return -2;
@@ -152,16 +147,16 @@ static int do_add(int argc, char **argv)
 
 static int do_del(int argc, char **argv)
 {
-	struct storm_param sp;
+	struct storm_info s_info;
 
-	if(parse_args(argc,argv,&sp)<0){
+	if(parse_args(argc,argv,&s_info)<0){
 		return -1;
 	}
 
 	GENL_REQUEST(req,1024, genl_family, 0, STORM_GENL_VERSION,
 		     STORM_CMD_DEL_IF,NLM_F_REQUEST | NLM_F_ACK);
 
-	addattr_l(&req.n,1024,STORM_ATTR_IF,&sp,sizeof(sp));
+	addattr_l(&req.n,1024,STORM_ATTR_IF,&s_info,sizeof(s_info));
 
 	if (rtnl_talk(&genl_rth, &req.n, NULL) < 0){
 			return -2;
@@ -177,7 +172,7 @@ int do_ipstorm(int argc, char **argv){
 		usage();
 	}
 
-	if (genl_init_handle(&genl_rth, STORM_GENL_NAME, &genl_family)){
+	if (genl_init_handle(&genl_rth,STORM_GENL_NAME,&genl_family)){
 		exit(-1);
 	}
 	
@@ -188,9 +183,6 @@ int do_ipstorm(int argc, char **argv){
 		matches(*argv,"delete") == 0){
 			return do_del(argc - 1 , argv + 1);
 	}
-	/*if(matches(*argv,"show") == 0){
-		return do_show(argc - 1, argv + 1);
-	}*/
 
 	fprintf(stderr,
 		"Command \"%s\" is unkonw, type \"ip storm help\".\n", *argv);
