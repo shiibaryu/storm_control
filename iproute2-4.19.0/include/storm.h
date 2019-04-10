@@ -22,7 +22,7 @@ enum {
 
 /*genl attrs*/
 struct storm_info{
-	char *if_name;
+	char if_name[STORM_DEVNAME_MAX];
 	int threshold;
 	int low_threshold;
 	unsigned short pb_type; /*flag to specify pps , bps or level*/

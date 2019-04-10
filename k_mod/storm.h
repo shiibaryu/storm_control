@@ -28,7 +28,7 @@ enum {
 
 /*genl attrs*/
 struct storm_info{
-	char *if_name;
+	char if_name[STORM_DEVNAME_MAX];
 	int threshold;
 	int low_threshold;
 	unsigned short pb_type; /*flag to specify pps , bps or level*/
@@ -41,6 +41,7 @@ struct storm_info{
 enum {
 	STORM_ATTR_NONE,
 	STORM_ATTR_IF,	
+	
 	__STORM_ATTR_MAX,
 };
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)

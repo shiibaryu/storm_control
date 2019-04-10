@@ -97,7 +97,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 {
 	bool found = false;
-	struct net *net;
+	struct net *if_net;
 	struct storm_control_dev *sc_dev,*next;
 
 	sc_dev = (struct storm_control_dev *)kmalloc(sizeof(struct storm_control_dev),
@@ -107,14 +107,14 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 	}
 
 	memset(sc_dev,0,sizeof(*sc_dev));
-	net = get_net(&init_net);
+	if_net = get_net(&init_net);
 
-	if (IS_ERR(net)) {
+	if (IS_ERR(if_net)) {
 		pr_debug("%s: invalid netns\n", __func__);
 		kfree(sc_dev);
-		return PTR_ERR(net);
+		return PTR_ERR(if_net);
 	}
-	sc_dev->net = net;
+	sc_dev->net = if_net;
 
 	sc_dev->dev = dev_get_by_name(&init_net,sc_dev->s_info.if_name);
 	if (!sc_dev->dev){
@@ -219,7 +219,7 @@ static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
 
 static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 	[STORM_ATTR_IF] = { .type = NLA_BINARY,
-			.len = sizeof(struct storm_info)},
+	                    .len = sizeof(struct storm_info)},
 };
 
 static struct genl_ops storm_nl_ops[] = {
@@ -247,6 +247,7 @@ static struct genl_family storm_nl_family = {
         .n_ops      	= ARRAY_SIZE(storm_nl_ops),
 	.module		= THIS_MODULE,
 };
+
 
 static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
 {
@@ -290,8 +291,8 @@ static int storm_nl_del_if(struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy(&s_info,info->attrs[STORM_ATTR_IF],sizeof(s_info));
 
 	sc_dev = storm_find_if(storm,s_info.if_name);
-	if(sc_dev){
-		return -EEXIST;
+	if(!sc_dev){
+		return -ENOENT;
 	}
 
 	storm_del_if(sc_dev);
