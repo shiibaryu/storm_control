@@ -54,7 +54,7 @@ void usage(void)
 
 static int parse_args(int argc,char **argv,struct storm_info *s_info)
 {
-	/* ip storm dev ens33 type broadcast pps 14000*/
+	/* ip storm add dev ens33 type broadcast pps 14000*/
 
 	memset(s_info,0,sizeof(struct storm_info));
 	
@@ -95,8 +95,6 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 			argc--;
 			argv++;
 			if(argc > 0){
-				argc--;
-				argv++;
 				s_info->low_threshold = atoi(*argv);
 			}
 		}
@@ -108,8 +106,6 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 			argc--;
 			argv++;
 			if(argc > 0){
-				argc--;
-				argv++;
 				s_info->low_threshold = atoi(*argv);
 			}		
 		}
