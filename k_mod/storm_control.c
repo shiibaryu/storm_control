@@ -81,6 +81,224 @@ static DEFINE_MUTEX(cpu_mutex);
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
 
+static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
+{
+	struct storm_control_dev *sc_dev;
+
+	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
+		if(strncmp(sc_dev->s_info->if_name,dev,STORM_DEVNAME_MAX)==0){
+			return sc_dev;
+		}
+	}
+
+	return NULL;
+}
+
+static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
+{
+	bool found = false;
+	struct net *net;
+	struct storm_control_dev *sc_dev,*next;
+
+	sc_dev = (struct storm_control_dev *)kmalloc(sizeof(struct storm_control_dev),
+									GFP_KERNEL);
+	if(!sc_dev){
+		return -ENOMEM;
+	}
+
+	memset(sc_dev,0,sizeof(*sc_dev));
+	net = get_net(&init_net);
+
+	if (IS_ERR(net)) {
+		pr_debug("%s: invalid netns\n", __func__);
+		kfree(sc_dev);
+		return PTR_ERR(net);
+	}
+	sc_dev->net = net;
+
+	sc_dev->dev = dev_get_by_name(&init_net,sc_dev->s_info->if_name);
+	if (!sc_dev->dev){
+		return -1;
+	}
+
+	if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_BROADCAST){
+            	printk(KERN_INFO "Control target is broadcast.\n");
+        }
+        else if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_MULTICAST){
+            	printk(KERN_INFO "Control target is multicast.\n");
+        }
+	else if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
+		printk(KERN_INFO "Control target is unknown_unicast.\n");
+	}
+        else{
+            printk(KERN_INFO "This traffic type could not be registered.\n");
+        }
+
+	if(sc_dev->s_info->pb_type & PPS){
+		sc_dev->pbc->pps_counter = alloc_percpu(int);
+		if(!sc_dev->pbc->pps_counter){
+			kfree(sc_dev);
+			return -1;
+		}
+	}
+	else if(sc_dev->s_info->pb_type & BPS){
+		sc_dev->pbc->bps_counter = alloc_percpu(unsigned int);
+		if(!sc_dev->pbc->bps_counter){
+			kfree(sc_dev);
+			return -1;
+		}
+	}
+
+	list_for_each_entry_rcu(next,&storm->if_list,list){
+		if(sc_dev->dev == next->dev){
+			found = true;
+			break;
+		}
+	}
+
+	if(found){
+		__list_add_rcu(&sc_dev->list,next->list.prev,&next->list);
+	}
+	else{
+		list_add_tail_rcu(&sc_dev->list,&storm->if_list);
+	}
+
+	return 0;
+}
+static void storm_del_if(struct storm_control_dev *sc_dev)
+{
+	put_net(sc_dev->net);
+	dev_put(sc_dev->dev);
+	if(sc_dev->s_info->pb_type & PPS){
+		free_percpu(sc_dev->pbc->pps_counter);
+	}
+	else if(sc_dev->s_info->pb_type & BPS ){
+		free_percpu(sc_dev->pbc->bps_counter);
+	}
+	
+	list_del_rcu(&sc_dev->list);
+	kfree_rcu(sc_dev,rcu);
+}
+
+static __net_init int storm_init_net(struct net *net)
+{
+	struct storm_net *storm = net_generic(net,storm_net_id);
+
+	storm->net = net;
+	INIT_LIST_HEAD(&storm->if_list);
+
+	return 0;
+}
+
+static __net_exit void storm_exit_net(struct net *net)
+{
+	struct storm_net *storm = net_generic(net,storm_net_id);
+	struct storm_control_dev *sc_dev,*next;
+
+	rcu_read_lock();
+
+	list_for_each_entry_safe(sc_dev,next,&storm->if_list,list){
+		storm_del_if(sc_dev);
+	}
+
+	rcu_read_unlock();
+
+	return;
+}
+
+static struct pernet_operations storm_net_ops = {
+	.init = storm_init_net,
+	.exit = storm_exit_net,
+	.id   = &storm_net_id,
+	.size = sizeof(struct storm_net),
+};
+
+/* Generic Netlink implementation */
+static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
+static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
+
+static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
+	[STORM_ATTR_IF] = { .type = NLA_BINARY,
+			.len = sizeof(struct storm_param)},
+};
+
+static struct genl_ops storm_nl_ops[] = {
+	{
+		.cmd	= STORM_CMD_ADD_IF,
+		.doit	= storm_nl_add_if,
+		.policy	= storm_nl_policy,
+		.flags	= GENL_ADMIN_PERM,
+    	},
+    	{
+		.cmd	= STORM_CMD_DEL_IF,
+		.doit	= storm_nl_del_if,
+		.policy	= storm_nl_policy,
+		.flags	= GENL_ADMIN_PERM,
+    	},
+};
+
+static struct genl_family storm_nl_family = {
+	.name		= STORM_GENL_NAME,
+	.version	= STORM_GENL_VERSION,
+	.maxattr	= STORM_ATTR_MAX,
+	.hdrsize	= 0,
+	.netnsok	= true,
+	.ops		= storm_nl_ops,
+        .n_ops      	= ARRAY_SIZE(storm_nl_ops),
+	.module		= THIS_MODULE,
+};
+
+static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret;
+	struct net *net = sock_net(skb->sk);
+	struct storm_net *storm = net_generic(net,storm_net_id);
+	struct storm_control_dev *sc_dev;
+	struct storm_info s_info;
+
+	if (!info->attrs[STORM_ATTR_IF]){
+		return -EINVAL;
+	}
+
+	nla_memcpy(s_info,info->attrs[STORM_ATTR_IF],sizeof(s_info));
+
+	sc_dev = storm_find_if(storm,s_info.if_name);
+	if(sc_dev){
+		return -EEXIST;
+	}
+
+	ret = storm_add_if(storm,&s_info);
+	if(ret < 0){
+		return ret;
+	}
+
+	return 0;
+
+}
+
+static int storm_nl_del_if(struct sk_buff *skb, struct genl_info *info)
+{
+	struct net *net = sock_net(skb->sk);
+	struct storm_net *storm = net_generic(net,storm_net_id);
+	struct storm_control_dev *sc_dev;
+	struct storm_info s_info;
+
+	if (!info->attrs[STORM_ATTR_IF]){
+		return -EINVAL;
+	}
+
+	nla_memcpy(s_info,info->attrs[STORM_ATTR_IF],sizeof(s_info));
+
+	sc_dev = storm_find_if(storm,s_info.if_name);
+	if(sc_dev){
+		return -EEXIST;
+	}
+
+	storm_del_if(sc_dev);
+
+	return 0;
+}
+
 static int pps_total_cpu_packet(int *pps)
 {
 	int cpu=0;
@@ -211,11 +429,11 @@ static void check_packet(unsigned long data)
 
 	printk(KERN_INFO "--------One Second passed--------\n");
 	if(sc_dev->s_info->pb_type & PPS){
-		sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev);
+		sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pbc->pps_counter);
     		pps_threshold_check(sc_dev);
 	}
 	else if(sc_dev->s_info->pb_type & BPS){
-		sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev);
+		sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->pbs->bps_counter);
     		bps_threshold_check(sc_dev);
 	}
 }
@@ -258,7 +476,7 @@ storm_hook(
 	net = get_net(&init_net);
 	storm = net_generic(net,storm_net_id);
 
-	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
+	list_for_each_entry(sc_dev,&storm_list->if_list,list){
 		if(skb->dev == sc_dev->dev){
 	    		/*Broadcast processing*/
 	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info->t_type & TRAFFIC_TYPE_BROADCAST)){
@@ -397,234 +615,15 @@ static struct nf_hook_ops nf_ops_storm = {
 	.hook = storm_hook,
 	.hooknum = NF_INET_PRE_ROUTING,
         .pf = NFPROTO_IPV4,
-    	.priority = NF_IP_PRI_FIRST
+    	.priority = NF_IP_PRI_FIRST,
 };
-
-static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
-{
-	struct storm_control_dev *sc_dev;
-
-	list_for_each_entry_rcu(sc_dev,&storm->if_list,list){
-		if(strncmp(sc_dev->s_info->if_name,dev,STORM_DEVNAME_MAX)==0){
-			return sc_dev;
-		}
-	}
-
-	return NULL;
-}
-
-static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
-{
-	bool found = false;
-	struct net *net;
-	struct storm_control_dev *sc_dev,*next;
-
-	sc_dev = (struct storm_control_dev *)kmalloc(sizeof(struct storm_control_dev),
-									GFP_KERNEL);
-	if(!sc_dev){
-		return -ENOMEM;
-	}
-
-	memset(sc_dev,0,sizeof(*sc_dev));
-	net = get_net(&init_net);
-
-	if (IS_ERR(net)) {
-		pr_debug("%s: invalid netns\n", __func__);
-		kfree(sc_dev);
-		return PTR_ERR(net);
-	}
-	sc_dev->net = net;
-
-	sc_dev->dev = dev_get_by_name(&init_net,sc_dev->s_info->if_name);
-	if (!sc_dev->dev){
-		return -1;
-	}
-
-	if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_BROADCAST){
-            	printk(KERN_INFO "Control target is broadcast.\n");
-        }
-        else if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_MULTICAST){
-            	printk(KERN_INFO "Control target is multicast.\n");
-        }
-	else if(sc_dev->s_info->traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
-		printk(KERN_INFO "Control target is unknown_unicast.\n");
-	}
-        else{
-            printk(KERN_INFO "This traffic type could not be registered.\n");
-        }
-
-	if(sc_dev->s_info->pb_type & PPS){
-		sc_dev->pbc->pps_counter = alloc_percpu(int);
-		if(sc_dev->pbc->pps_counter == NULL){
-			kfree(sc_dev);
-			return -1;
-		}
-	}
-	else if(sc_dev->s_info->pb_type & BPS){
-		sc_dev->pbc->bps_counter = alloc_percpu(unsigned int);
-		if(sc_dev->pbc->bps_counter == NULL){
-			kfree(sc_dev);
-			return -1;
-		}
-	}
-
-	list_for_each_entry_rcu(next,&storm->if_list,list){
-		if(sc_dev->dev == next->dev){
-			found = true;
-			break;
-		}
-	}
-
-	if(found){
-		__list_add_rcu(&sc_dev->list,next->list.prev,&next->list);
-	}
-	else{
-		list_add_tail_rcu(&sc_dev->list,&storm->if_list);
-	}
-
-	return 0;
-}
-static void storm_del_if(struct storm_control_dev *sc_dev)
-{
-	put_net(sc_dev->net);
-	dev_put(sc_dev->dev);
-	if(sc_dev->s_info->pb_type & PPS){
-		free_percpu(sc_dev->pbc->pps_counter);
-	}
-	else if(sc_dev->s_info->pb_type & BPS || sc_dev->pb_type & LEVEL){
-		free_percpu(sc_dev->pbc->bps_counter);
-
-	}
-	
-	list_del_rcu(&sc_dev->list);
-	kfree_rcu(sc_dev,rcu);
-}
-
-static __net_init int storm_init_net(struct net *net)
-{
-	struct storm_net *storm = net_generic(net,storm_net_id);
-
-	storm->net = net;
-	INIT_LIST_HEAD(&storm->if_list);
-
-	return 0;
-}
-
-static __net_exit void storm_exit_net(struct net *net)
-{
-	struct storm_net *storm = net_generic(net,storm_net_id);
-	struct storm_control_dev *sc_dev,*next;
-
-	rcu_read_lock();
-
-	list_for_each_entry_safe(sc_dev,next,&storm->if_list,list){
-		storm_del_if(sc_dev);
-	}
-
-	rcu_read_unlock();
-
-	return;
-}
-
-static struct pernet_operations storm_net_ops = {
-	.init = storm_init_net,
-	.exit = storm_exit_net,
-	.id   = &storm_net_id,
-	.size = sizeof(struct storm_net),
-};
-
-/* Generic Netlink implementation */
-static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
-static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
-
-static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
-	[STORM_ATTR_IF] = { .type = NLA_BINARY,
-			.len = sizeof(struct storm_param) },
-};
-
-static struct genl_ops storm_nl_ops[] = {
-    {
-	.cmd	= STORM_CMD_ADD_IF,
-	.doit	= storm_nl_add_if,
-	.policy	= storm_nl_policy,
-	.flags	= GENL_ADMIN_PERM,
-
-    },
-    {
-	.cmd	= STORM_CMD_DEL_IF,
-	.doit	= storm_nl_del_if,
-	.policy	= storm_nl_policy,
-	.flags	= GENL_ADMIN_PERM,
-
-    },
-};
-
-static struct genl_family storm_nl_family = {
-	.name		= STORM_GENL_NAME,
-	.version	= STORM_GENL_VERSION,
-	.maxattr	= STORM_ATTR_MAX,
-	.hdrsize	= 0,
-	.netnsok	= true,
-	.ops		= storm_nl_ops,
-        .n_ops      	= ARRAY_SIZE(storm_nl_ops),
-	.module		= THIS_MODULE,
-};
-
-static int storm_nl_add_if(struct sk_buff *skb, struct genl_info *info)
-{
-	int ret;
-	struct net *net = sock_net(skb->sk);
-	struct storm_net *storm = net_generic(net,storm_net_id);
-	struct storm_control_dev *sc_dev;
-	struct storm_info s_info;
-
-	if (!info->attrs[STORM_ATTR_IF]){
-		return -EINVAL;
-	}
-
-	nla_memcpy(s_info,info->attrs[STORM_ATTR_IF],sizeof(s_info));
-
-	sc_dev = storm_find_if(storm,s_info.if_name);
-	if(sc_dev){
-		return -EEXIST;
-	}
-
-	ret = storm_add_if(storm,&s_info);
-	if(ret < 0){
-		return ret;
-	}
-
-	return 0;
-
-}
-
-static int storm_nl_del_if(struct sk_buff *skb, struct genl_info *info)
-{
-	struct net *net = sock_net(skb->sk);
-	struct storm_net *storm = net_generic(net,storm_net_id);
-	struct storm_control_dev *sc_dev;
-	struct storm_info s_info;
-
-	if (!info->attrs[STORM_ATTR_IF]){
-		return -EINVAL;
-	}
-
-	nla_memcpy(s_info,info->attrs[STORM_ATTR_IF],sizeof(s_info));
-
-	sc_dev = storm_find_if(storm,s_info.if_name);
-	if(sc_dev){
-		return -EEXIST;
-	}
-
-	storm_del_if(sc_dev);
-
-	return 0;
-}
     
 static int 
 __init stctl_init_module(void)
 {       
-        int ret = 0;
+        int ret;
+
+	printk(KERN_INFO "Storm control module was inserted.\n");
 
 	init_timer(&sc_timer); 
 
@@ -666,10 +665,10 @@ module_init(stctl_init_module);
 static void 
 __exit stctl_exit_module(void)
 {	
-	del_timer(&sc_timer);
-	unregister_pernet_subsys(&storm_net_ops);
-	nf_unregister_hook(&nf_ops_storm);
 	genl_unregister_family(&storm_nl_family);
+	nf_unregister_hook(&nf_ops_storm);
+	unregister_pernet_subsys(&storm_net_ops);
+	del_timer(&sc_timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
 module_exit(stctl_exit_module);

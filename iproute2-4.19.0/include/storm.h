@@ -1,4 +1,4 @@
-//* storm.h */
+/* storm.h */
 
 #ifndef _STORM_H_
 #define _STORM_H_
@@ -21,12 +21,14 @@ enum {
 #define STORM_CMD_MAX	(__STORM_CMD_MAX - 1)
 
 /*genl attrs*/
-struct storm_param{
-	char *dev;
-	unsigned short  traffic_type;
-	unsigned short  control_type;
-	int  threshold;
-	int  low_threshold;
+struct storm_info{
+	char *if_name;
+	int threshold;
+	int low_threshold;
+	unsigned short pb_type; /*flag to specify pps , bps or level*/
+	unsigned short traffic_type; /* user specified traffic type*/
+    unsigned short drop_flag; /*drop_flag*/
+	unsigned short first_flag; /*first time or not*/
 }__attribute__((__packed__));
 
 
@@ -37,4 +39,5 @@ enum {
 };
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)
 
+#endif
 #endif
