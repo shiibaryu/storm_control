@@ -27,6 +27,8 @@
 #define PPS				0x0001
 #define BPS				0x0002
 #define LEVEL				0x0004
+#define FLAG_UP				0x0001
+#define FLAG_DOWN			0x0002
 
 static struct rtnl_handle genl_rth;
 static int genl_family = -1;
@@ -81,7 +83,7 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 			}		
 			else if(strcmp(*argv,"unknown_unicast") == 0){
 				s_info->traffic_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
-				s_info->f_flag = FLAG_UP;
+				s_info->first_flag = FLAG_UP;
 				s_info->drop_flag = FLAG_DOWN;
 			}
 		}
@@ -102,7 +104,7 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 			s_info->pb_type = BPS;
 			argc--;
 			argv++;
-			s_info->thresholsd = atoi(*argv);
+			s_info->threshold = atoi(*argv);
 			argc--;
 			argv++;
 			if(argc > 0){

@@ -40,4 +40,3 @@ enum {
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)
 
 #endif
-#endif
