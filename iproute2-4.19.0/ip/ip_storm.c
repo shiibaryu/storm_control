@@ -58,11 +58,7 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 	/* ip storm add dev ens33 type broadcast pps 14000*/
 
 	memset(s_info,0,sizeof(struct storm_info));
-<<<<<<< HEAD
 
-=======
-	
->>>>>>> origin/master
 	s_info->if_descriptor = descriptor;
 	descriptor += 1;
 	
