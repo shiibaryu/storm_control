@@ -46,11 +46,6 @@ MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 /* per netnamespace parameters*/
 static unsigned int storm_net_id;
 
-struct pb_checker{
-	int pps_checker;
-	unsigned int bps_checker;
-};
-
 struct storm_net{
 	struct net *net;
 	struct list_head if_list;
@@ -65,8 +60,9 @@ struct storm_control_dev{
 	struct net_device *dev;
 	int __percpu *pps;
 	unsigned int __percpu *bps;
-	struct pb_checker *pb_chk;
 	int if_descriptor;
+	int pps_checker;
+	unsigned int bps_checker;
 };
 
 static struct timer_list sc_timer;
@@ -353,68 +349,68 @@ static void initialize_bps_counter(unsigned int *bps)
 }
 
 static void pps_threshold_check(struct storm_control_dev *sc_dev){
-	if(sc_dev->pb_chk->pps_checker >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+	if(sc_dev->pps_checker >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 		sc_dev->s_info.drop_flag = FLAG_UP;
-		sc_dev->pb_chk->pps_checker = 0;
-		initialize_pps_counter(sc_dev->pps);
+		sc_dev->pps_checker = 0;
+		initialize_pps_counter(sc_dev->pps_checker);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->s_info.if_name);
     	}
-    else if(sc_dev->pb_chk->pps_checker < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+    else if(sc_dev->pps_checker < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	    	sc_dev->s_info.first_flag = FLAG_UP;
-		sc_dev->pb_chk->pps_checker = 0;
-		initialize_pps_counter(sc_dev->pps);
+		sc_dev->pps_checker = 0;
+		initialize_pps_counter(sc_dev->pps_checker);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->s_info.if_name);
-	    	printk(KERN_INFO "Blocking Packet ended at %s.\n",sc_dev->s_info.if_name);
+	    	printk(KERN_INFO "Packet isn't blocked at %s.\n",sc_dev->s_info.if_name);
     	}	
-    else if(sc_dev->pb_chk->pps_checker >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
-		sc_dev->pb_chk->pps_checker = 0;
-	    	initialize_pps_counter(sc_dev->pps);
+    else if(sc_dev->pps_checker >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
+		sc_dev->pps_checker = 0;
+	    	initialize_pps_counter(sc_dev->pps_checker);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->s_info.if_name);
     	}
-    else if(sc_dev->pb_chk->pps_checker < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
+    else if(sc_dev->pps_checker < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
 	    	sc_dev->s_info.first_flag = FLAG_UP;
 	    	sc_dev->s_info.drop_flag = FLAG_DOWN;
-		sc_dev->pb_chk->pps_checker = 0;
-		initialize_pps_counter(sc_dev->pps);
+		sc_dev->pps_checker = 0;
+		initialize_pps_counter(sc_dev->pps_checker);
 	    	printk(KERN_INFO "Packet per second was less than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Packet blocking ended at %s .--------\n",sc_dev->s_info.if_name);
     	}
 }
 
 static void bps_threshold_check(struct storm_control_dev *sc_dev){
-	if(sc_dev->pb_chk->bps_checker * 8 >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+	if(sc_dev->bps_checker * 8 >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 		sc_dev->s_info.drop_flag = FLAG_UP;
-		sc_dev->pb_chk->pps_checker = 0;
-		initialize_bps_counter(sc_dev->bps);
+		sc_dev->bps_checker = 0;
+		initialize_bps_counter(sc_dev->bps_checker);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->s_info.if_name);
     	}
-    else if(sc_dev->pb_chk->bps_checker * 8 < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+    else if(sc_dev->bps_checker * 8 < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	    	sc_dev->s_info.first_flag = FLAG_UP;
-		sc_dev->pb_chk->bps_checker = 0;
-		initialize_bps_counter(sc_dev->bps);
+		sc_dev->bps_checker = 0;
+		initialize_bps_counter(sc_dev->bps_checker);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->s_info.if_name);
-	    	printk(KERN_INFO "Blocking packet ended at %s.\n",sc_dev->s_info.if_name);
+	    	printk(KERN_INFO "Packet isn't blocked at %s.\n",sc_dev->s_info.if_name);
     	}
-    else if(sc_dev->pb_chk->bps_checker * 8 >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
-		sc_dev->pb_chk->bps_checker = 0;
-	    	initialize_bps_counter(sc_dev->bps);
+    else if(sc_dev->bps_checker * 8 >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
+		sc_dev->bps_checker = 0;
+	    	initialize_bps_counter(sc_dev->bps_checker);
 		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->s_info.if_name);
     	}
-    else if(sc_dev->pb_chk->bps_checker * 8 < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
+    else if(sc_dev->bps_checker * 8 < sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
 		sc_dev->s_info.first_flag = FLAG_UP;
 	    	sc_dev->s_info.drop_flag = FLAG_DOWN;
-		sc_dev->pb_chk->bps_checker = 0;
-		initialize_bps_counter(sc_dev->bps);
+		sc_dev->bps_checker = 0;
+		initialize_bps_counter(sc_dev->bps_checker);
 	    	printk(KERN_INFO "Bit per second was less than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Blocking packet ended at %s.--------\n",sc_dev->s_info.if_name);
     	}
@@ -422,6 +418,7 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 
 static void check_packet(unsigned long data)
 {
+	int cpu;
 	struct storm_control_dev *sc_dev;
 	struct net *net;
 	struct storm_net *storm;
@@ -433,11 +430,11 @@ static void check_packet(unsigned long data)
 		if(sc_dev->if_descriptor == (int)data){
 			printk(KERN_INFO "--------One Second passed--------\n");
 			if(sc_dev->s_info.pb_type & PPS){
-				sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
+				sc_dev->pps_checker = pps_total_cpu_packet(sc_dev->pps);
     				pps_threshold_check(sc_dev);
 			}
 			else if(sc_dev->s_info.pb_type & BPS){
-				sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->bps);
+				sc_dev->bps_checker = bps_total_cpu_bit(sc_dev->bps);
     				bps_threshold_check(sc_dev);
 			}
 		}
@@ -533,7 +530,7 @@ storm_hook(
 					printk(KERN_INFO "--------One second timer started--------\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 
@@ -574,7 +571,7 @@ storm_hook(
 					printk(KERN_INFO "--------One second timer started--------\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 					
@@ -629,8 +626,6 @@ __init stctl_init_module(void)
 {       
         int ret;
 
-	printk(KERN_INFO "Storm control module was inserted.\n");
-
 	init_timer(&sc_timer); 
 
 	ret = register_pernet_subsys(&storm_net_ops);
@@ -650,7 +645,7 @@ __init stctl_init_module(void)
 		goto genl_register_failed;
 	}
 
-	printk(KERN_INFO "storm_control module is loaded\n");
+	printk(KERN_INFO "storm_control module was inserted.\n");
 
 	return ret;
 
