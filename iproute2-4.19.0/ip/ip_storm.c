@@ -59,7 +59,7 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 
 	memset(s_info,0,sizeof(struct storm_info));
 	
-	s_info.if_descriptor = descriptor;
+	s_info->if_descriptor = descriptor;
 	descriptor += 1;
 	
 	if(argc < 1){
