@@ -66,9 +66,11 @@ struct storm_control_dev{
 	int __percpu *pps;
 	unsigned int __percpu *bps;
 	struct pb_checker *pb_chk;
+	int if_descriptor;
 };
 
 static struct timer_list sc_timer;
+static int descriptor;
 
 /*mutext for checking per_cpu variable*/
 static DEFINE_MUTEX(cpu_mutex);
@@ -129,6 +131,9 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
         else{
             printk(KERN_INFO "This traffic type could not be registered.\n");
         }
+
+	sc_dev->if_descriptor = descriptor;
+	descriptor += 1;
 
 	if(sc_dev->s_info.pb_type & PPS){
 		sc_dev->pps = alloc_percpu(int);
@@ -417,16 +422,25 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 
 static void check_packet(unsigned long data)
 {
-	struct storm_control_dev *sc_dev = (struct storm_control_dev *)data;
+	struct storm_control_dev *sc_dev;
+	struct net *net;
+	struct storm_net *storm;
 
-	printk(KERN_INFO "--------One Second passed--------\n");
-	if(sc_dev->s_info.pb_type & PPS){
-		sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
-    		pps_threshold_check(sc_dev);
-	}
-	else if(sc_dev->s_info.pb_type & BPS){
-		sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->bps);
-    		bps_threshold_check(sc_dev);
+	net = get_net(&init_net);
+	storm = net_generic(net,storm_net_id);
+
+	list_for_each_entry(sc_dev,&storm->if_list,list){
+		if(sc_dev->if_descriptor == (int)data){
+			printk(KERN_INFO "--------One Second passed--------\n");
+			if(sc_dev->s_info.pb_type & PPS){
+				sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
+    				pps_threshold_check(sc_dev);
+			}
+			else if(sc_dev->s_info.pb_type & BPS){
+				sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->bps);
+    				bps_threshold_check(sc_dev);
+			}
+		}
 	}
 }
 
@@ -478,7 +492,7 @@ storm_hook(
 					printk(KERN_INFO "One second timer started.\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)&sc_dev;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 
