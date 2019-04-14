@@ -112,7 +112,6 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 		return PTR_ERR(if_net);
 	}
 	sc_dev->net = if_net;
-	
 	sc_dev->dev = dev_get_by_name(&init_net,sc_dev->s_info.if_name);
 	if (!sc_dev->dev){
 		return -1;
@@ -418,25 +417,16 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 
 static void check_packet(unsigned long data)
 {
-	struct storm_control_dev *sc_dev;
-	struct net *net;
-	struct storm_net *storm;
+	struct storm_control_dev *sc_dev = (struct storm_control_dev *)data;
 
-	net = get_net(&init_net);
-	storm = net_generic(net,storm_net_id);
-
-	list_for_each_entry(sc_dev,&storm->if_list,list){
-		if(sc_dev->s_info.if_descriptor == data){
-			printk(KERN_INFO "--------One Second passed--------\n");
-			if(sc_dev->s_info.pb_type & PPS){
-				sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
-    				pps_threshold_check(sc_dev);
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->bps);
-    				bps_threshold_check(sc_dev);
-			}
-		}
+	printk(KERN_INFO "--------One Second passed--------\n");
+	if(sc_dev->s_info.pb_type & PPS){
+		sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
+    		pps_threshold_check(sc_dev);
+	}
+	else if(sc_dev->s_info.pb_type & BPS){
+		sc_dev->pb_chk->bps_checker = bps_total_cpu_bit(sc_dev->bps);
+    		bps_threshold_check(sc_dev);
 	}
 }
 
@@ -488,7 +478,7 @@ storm_hook(
 					printk(KERN_INFO "One second timer started.\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = sc_dev->s_info.if_descriptor;
+					sc_timer.data = (unsigned long)&sc_dev;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 
@@ -529,7 +519,7 @@ storm_hook(
 					printk(KERN_INFO "--------One second timer started--------\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = sc_dev->s_info.if_descriptor;
+					sc_timer.data = (unsigned long)&sc_dev;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 
@@ -570,7 +560,7 @@ storm_hook(
 					printk(KERN_INFO "--------One second timer started--------\n");
 
 					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = sc_dev->s_info.if_descriptor;
+					sc_timer.data = (unsigned long)&sc_dev;
 					sc_timer.function = check_packet;
 					add_timer(&sc_timer);
 					
@@ -602,13 +592,12 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_DROP;
 					}
-				}	
+				}
 			}
 			else{
 				return NF_ACCEPT;
 			}
 		}
-
 	}
 
 	return NF_ACCEPT;
