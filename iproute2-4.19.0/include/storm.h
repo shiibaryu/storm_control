@@ -9,6 +9,12 @@
 #define STORM_VERSION "0.0.1"
 #define STORM_DEVNAME_MAX	IFNAMSIZ
 
+#ifndef __KERNEL__
+#include <netlink/genl/genl.h>
+#include <netlink/genl/family.h>
+#include <netlink/genl/ctrl.h>
+#endif
+
 #define STORM_GENL_NAME	"storm_control"
 #define STORM_GENL_VERSION	0x00
 
@@ -36,6 +42,7 @@ struct storm_info{
 enum {
 	STORM_ATTR_NONE,
 	STORM_ATTR_IF,	
+
 	__STORM_ATTR_MAX,
 };
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)

@@ -42,6 +42,7 @@ struct storm_info{
 enum {
 	STORM_ATTR_NONE,
 	STORM_ATTR_IF,	
+
 	__STORM_ATTR_MAX,
 };
 #define STORM_ATTR_MAX	(__STORM_ATTR_MAX - 1)

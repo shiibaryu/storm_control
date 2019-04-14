@@ -112,6 +112,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 		return PTR_ERR(if_net);
 	}
 	sc_dev->net = if_net;
+	
 	sc_dev->dev = dev_get_by_name(&init_net,sc_dev->s_info.if_name);
 	if (!sc_dev->dev){
 		return -1;
@@ -425,7 +426,7 @@ static void check_packet(unsigned long data)
 	storm = net_generic(net,storm_net_id);
 
 	list_for_each_entry(sc_dev,&storm->if_list,list){
-		if(*sc_dev->s_info.if_descriptor == data){
+		if(sc_dev->s_info.if_descriptor == data){
 			printk(KERN_INFO "--------One Second passed--------\n");
 			if(sc_dev->s_info.pb_type & PPS){
 				sc_dev->pb_chk->pps_checker = pps_total_cpu_packet(sc_dev->pps);
