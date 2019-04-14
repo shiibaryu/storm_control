@@ -31,6 +31,7 @@ struct storm_info{
 	char if_name[STORM_DEVNAME_MAX];
 	int threshold;
 	int low_threshold;
+	unsigned long if_descriptor;
 	unsigned short pb_type; /*flag to specify pps , bps or level*/
 	unsigned short traffic_type; /* user specified traffic type*/
     unsigned short drop_flag; /*drop_flag*/

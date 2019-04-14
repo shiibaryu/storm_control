@@ -32,6 +32,7 @@
 
 static struct rtnl_handle genl_rth;
 static int genl_family = -1;
+static unsigned long descriptor = 1;
 
 static void usage(void)__attribute__((noreturn));
 
@@ -57,6 +58,9 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 	/* ip storm add dev ens33 type broadcast pps 14000*/
 
 	memset(s_info,0,sizeof(struct storm_info));
+	
+	s_info.if_descriptor = descriptor;
+	descriptor += 1;
 	
 	if(argc < 1){
 		usage();
