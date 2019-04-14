@@ -34,7 +34,7 @@ struct storm_info{
 	unsigned long if_descriptor;
 	unsigned short pb_type; /*flag to specify pps , bps or level*/
 	unsigned short traffic_type; /* user specified traffic type*/
-    unsigned short drop_flag; /*drop_flag*/
+    	unsigned short drop_flag; /*drop_flag*/
 	unsigned short first_flag; /*first time or not*/
 }__attribute__((__packed__));
 
