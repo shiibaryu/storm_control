@@ -500,6 +500,9 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_ACCEPT;
 					}
+					else{
+						return NF_ACCEPT;
+					}
 	    			}
 				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
 					if(sc_dev->s_info.pb_type & PPS){
@@ -508,6 +511,9 @@ storm_hook(
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
 						return NF_ACCEPT;
 					}
 				}
@@ -520,6 +526,12 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_DROP;
 					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else{
+					return NF_ACCEPT;
 				}
 			}
 	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
@@ -541,6 +553,9 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_ACCEPT;
 					}
+					else{
+						return NF_ACCEPT;
+					}
 	    			}
 				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
 					if(sc_dev->s_info.pb_type & PPS){
@@ -549,6 +564,9 @@ storm_hook(
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
 						return NF_ACCEPT;
 					}
 				}
@@ -561,6 +579,9 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_DROP;
 					}
+				}
+				else{
+						return NF_ACCEPT;
 				}
 			}
 			else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
