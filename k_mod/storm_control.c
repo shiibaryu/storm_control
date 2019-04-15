@@ -66,7 +66,7 @@ struct storm_control_dev{
 };
 
 static struct timer_list sc_timer;
-static int descriptor;
+static int descriptor = 0;
 
 /*mutext for checking per_cpu variable*/
 static DEFINE_MUTEX(cpu_mutex);
@@ -480,7 +480,6 @@ storm_hook(
 
 	list_for_each_entry(sc_dev,&storm->if_list,list){
 		if(skb->dev == sc_dev->dev){
-	    		/*Broadcast processing*/
 	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
 	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 					sc_dev->s_info.first_flag = FLAG_DOWN;
@@ -527,7 +526,7 @@ storm_hook(
 						return NF_DROP;
 					}
 					else{
-						return NF_ACCEPT;
+						return NF_DROP;
 					}
 				}
 				else{
@@ -579,6 +578,9 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_DROP;
 					}
+					else{
+						return NF_DROP;
+					}
 				}
 				else{
 						return NF_ACCEPT;
@@ -603,6 +605,9 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_ACCEPT;
 					}
+					else{
+						return NF_ACCEPT;
+					}
 	    			}
 				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
 					if(sc_dev->s_info.pb_type & PPS){
@@ -611,6 +616,9 @@ storm_hook(
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
 						return NF_ACCEPT;
 					}
 				}
@@ -623,6 +631,12 @@ storm_hook(
 						this_cpu_add(*sc_dev->bps,skb->len);
 						return NF_DROP;
 					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+					return NF_ACCEPT;
 				}
 			}
 			else{
