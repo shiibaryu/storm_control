@@ -530,7 +530,7 @@ storm_hook(
 					}
 				}
 				else{
-					return NF_ACCEPT;
+					return NF_DROP;
 				}
 			}
 	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
