@@ -164,6 +164,34 @@ static int do_del(int argc, char **argv)
 
 }
 
+static void print_if(struct storm_info *s_info)
+{
+
+}
+static int storm_show(const struct sockaddr_nl *who,struct nlmsghdr *n,void *arg)
+{
+
+}
+
+static int do_show(int argc,char **argv){
+
+	GENL_REQUEST(req, 128, genl_family, 0,
+		     AF_GRAFT_GENL_VERSION, STORM_CMD_SHOW_IF,
+		     NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST);
+
+	req.n.nlmsg_seq = genl_rth.dump = ++ genl_rth.seq;
+
+	if (rtnl_send(&genl_rth, &req, req.n.nlmsg_len) < 0)
+		return -2;
+
+	if (rtnl_dump_filter(&genl_rth,storm_show, NULL) < 0) {
+		fprintf(stderr, "Dump terminated\n");
+		exit(1);
+	}
+
+	return 0;
+}
+
 int do_ipstorm(int argc, char **argv){
 
 	if (argc < 1 || !matches(*argv, "help")){
@@ -177,9 +205,12 @@ int do_ipstorm(int argc, char **argv){
 	if(matches(*argv,"add") == 0){
 		return do_add(argc - 1, argv + 1);
 	}
-	if(matches(*argv,"del") == 0 ||
+	else if(matches(*argv,"del") == 0 ||
 		matches(*argv,"delete") == 0){
 			return do_del(argc - 1 , argv + 1);
+	}
+	else if(matches(*argv,"show")==0){
+		return do_show(argc - 1,argv + 1);
 	}
 
 	fprintf(stderr,

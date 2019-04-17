@@ -214,6 +214,7 @@ static struct pernet_operations storm_net_ops = {
 /* Generic Netlink implementation */
 static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
 static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
+static int storm_nl_del_if(struct sk_buff *skb, struct netlink_callback *cb);
 
 static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 	[STORM_ATTR_IF] = { .type = NLA_BINARY,
@@ -233,6 +234,11 @@ static struct genl_ops storm_nl_ops[] = {
 		.policy	= storm_nl_policy,
 		.flags	= GENL_ADMIN_PERM,
     	},
+	{
+		.cmd 	= STORM_CMD_SHOW_IF;
+		.dumpit = storm_nl_show_if;
+		.policy = storm_nl_policy;
+	}.
 };
 
 static struct genl_family storm_nl_family = {
@@ -297,6 +303,62 @@ static int storm_nl_del_if(struct sk_buff *skb, struct genl_info *info)
 
 	return 0;
 }
+
+static int storm_nl_send_if(struct sk_buff *skb, u32 portid, u32 seq,
+			    int flags, struct storm_control_dev *sc_dev)
+{
+	void *hdr;
+	struct storm_info s_info;
+
+	hdr = genlmsg_put(skb, portid, seq, &storm_nl_family, flags,
+			  STORM_CMD_GET_IF);
+
+	if (!hdr){
+		return -EMSGSIZE;
+	}
+
+	s_info = sc_dev->s_info;
+
+	if (nla_put(skb, STORM_ATTR_ENDPOINT, sizeof(storm_info), &s_info)){
+		goto nla_put_failure;
+	}
+
+	genlmsg_end(skb, hdr);
+
+	return 0;
+
+nla_put_failure:
+	genlmsg_cancel(skb, hdr);
+	return -EMSGSIZE;
+}
+
+static int storm_nl_show_if(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	int ret, idx, cnt;
+	struct storm_net *storm = net_generic(sock_net(skb->sk), graft_net_id);
+	struct storm_control_dev *sc_dev;
+
+	cnt = 0;
+	idx = cb->args[0];
+	
+	list_for_each_entry_rcu(sc_dev, &storm->if_list, list) {
+		if (idx > cnt) {
+			cnt ++;
+			continue;
+		}
+		ret = graft_nl_send_ep(skb, NETLINK_CB(cb->skb).portid,
+				       cb->nlh->nlmsg_seq, NLM_F_MULTI,*sc_dev);
+		if (ret < 0){
+			return ret;
+		}
+		break;
+	}
+
+	cb->args[0] = cnt + 1;
+
+	return skb->len;
+}
+
 
 static int pps_total_cpu_packet(int  __percpu *pps)
 {
@@ -480,6 +542,7 @@ storm_hook(
 
 	list_for_each_entry(sc_dev,&storm->if_list,list){
 		if(skb->dev == sc_dev->dev){
+
 	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
 	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 					sc_dev->s_info.first_flag = FLAG_DOWN;
@@ -530,7 +593,7 @@ storm_hook(
 					}
 				}
 				else{
-					return NF_DROP;
+					return NF_ACCEPT;
 				}
 			}
 	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
