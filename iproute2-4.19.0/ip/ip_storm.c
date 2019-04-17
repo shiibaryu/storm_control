@@ -212,7 +212,7 @@ static int storm_show(const struct sockaddr_nl *who,struct nlmsghdr *n,void *arg
 		     (void *)ghdr + GENL_HDRLEN, len);
 
 	if (!attrs[STORM_ATTR_IF]) {
-		fprintf(stderr, "%s: endpoint not found in the nlmsg\n",
+		fprintf(stderr, "%s: ifkviv not found in the nlmsg\n",
 			__func__);
 		return -EBADMSG;
 	}
@@ -257,11 +257,11 @@ int do_ipstorm(int argc, char **argv){
 	if(matches(*argv,"add") == 0){
 		return do_add(argc - 1, argv + 1);
 	}
-	else if(matches(*argv,"del") == 0 ||
+	if(matches(*argv,"del") == 0 ||
 		matches(*argv,"delete") == 0){
 			return do_del(argc - 1 , argv + 1);
 	}
-	else if(matches(*argv,"show")==0){
+	if(matches(*argv,"show")==0){
 		return do_show(argc - 1,argv + 1);
 	}
 
