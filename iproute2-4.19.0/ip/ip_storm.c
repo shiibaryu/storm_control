@@ -166,17 +166,69 @@ static int do_del(int argc, char **argv)
 
 static void print_if(struct storm_info *s_info)
 {
-
+	if(s_info->traffic_type & TRAFFIC_TYPE_BROADCAST){
+		if(s_info->pb_type & PPS){
+			print_if("%s broadcast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+		else if(s_info->pb_type & BPS){
+			print_if("%s broadcast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+	}
+	else if(s_info->traffic_type & TRAFFIC_TYPE_MULTICAST){
+		if(s_info->pb_type & PPS){
+			print_if("%s multicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+		else if(s_info->pb_type & BPS){
+			print_if("%s multicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+	}
+	else if(s_info->traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
+		if(s_info->pb_type & PPS){
+			print_if("%s unknown_unicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+		else if(s_info->pb_type & BPS){
+			print_if("%s unknown_unicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+		}
+	}
 }
 static int storm_show(const struct sockaddr_nl *who,struct nlmsghdr *n,void *arg)
 {
+	struct storm_info s_info;
+	struct genlmsghdr *ghdr;
+	struct rtattr *attrs[STORM_ATTR_MAX + 1];
+	int len;
 
+	if (n->nlmsg_type == NLMSG_ERROR){
+		return -EBADMSG;
+	}
+
+	ghdr = NLMSG_DATA(n);
+	len = n->nlmsg_len - NLMSG_LENGTH(sizeof(*ghdr));
+	if (len < 0){
+		return -1;
+	}
+
+	parse_rtattr(attrs, STORM_ATTR_MAX,
+		     (void *)ghdr + GENL_HDRLEN, len);
+
+	if (!attrs[STORM_ATTR_ENDPOINT]) {
+		fprintf(stderr, "%s: endpoint not found in the nlmsg\n",
+			__func__);
+		return -EBADMSG;
+	}
+
+	memcpy(&s_info, RTA_DATA(attrs[STORM_ATTR_ENDPOINT]),
+	       sizeof(s_info));
+
+	print_if(&s_info);
+
+	return 0;
 }
 
 static int do_show(int argc,char **argv){
 
 	GENL_REQUEST(req, 128, genl_family, 0,
-		     AF_GRAFT_GENL_VERSION, STORM_CMD_SHOW_IF,
+		     STORM_GENL_VERSION, STORM_CMD_SHOW_IF,
 		     NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST);
 
 	req.n.nlmsg_seq = genl_rth.dump = ++ genl_rth.seq;

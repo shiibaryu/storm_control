@@ -22,6 +22,7 @@
 enum {
 	STORM_CMD_ADD_IF,
 	STORM_CMD_DEL_IF,
+	STORM_CMD_SHOW_IF,
 	__STORM_CMD_MAX,
 };
 #define STORM_CMD_MAX	(__STORM_CMD_MAX - 1)
@@ -31,7 +32,7 @@ struct storm_info{
 	char if_name[STORM_DEVNAME_MAX];
 	int threshold;
 	int low_threshold;
-	unsigned short pb_type; /*flag to specify pps , bps or level*/
+	unsigned short pb_type; /*flag to specify pps or bps*/
 	unsigned short traffic_type; /* user specified traffic type*/
     unsigned short drop_flag; /*drop_flag*/
 	unsigned short first_flag; /*first time or not*/
