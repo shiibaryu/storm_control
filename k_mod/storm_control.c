@@ -214,7 +214,7 @@ static struct pernet_operations storm_net_ops = {
 /* Generic Netlink implementation */
 static int storm_nl_add_if(struct sk_buff *skb, struct genl_info * info);
 static int storm_nl_del_if(struct sk_buff *skb, struct genl_info * info);
-static int storm_nl_del_if(struct sk_buff *skb, struct netlink_callback *cb);
+static int storm_nl_show_if(struct sk_buff *skb, struct netlink_callback *cb);
 
 static struct nla_policy storm_nl_policy[STORM_ATTR_MAX + 1] = {
 	[STORM_ATTR_IF] = { .type = NLA_BINARY,
@@ -235,10 +235,10 @@ static struct genl_ops storm_nl_ops[] = {
 		.flags	= GENL_ADMIN_PERM,
     	},
 	{
-		.cmd 	= STORM_CMD_SHOW_IF;
-		.dumpit = storm_nl_show_if;
-		.policy = storm_nl_policy;
-	}.
+		.cmd 	= STORM_CMD_SHOW_IF,
+		.dumpit = storm_nl_show_if,
+		.policy = storm_nl_policy,
+	},
 };
 
 static struct genl_family storm_nl_family = {
@@ -311,7 +311,7 @@ static int storm_nl_send_if(struct sk_buff *skb, u32 portid, u32 seq,
 	struct storm_info s_info;
 
 	hdr = genlmsg_put(skb, portid, seq, &storm_nl_family, flags,
-			  STORM_CMD_GET_IF);
+			  STORM_CMD_SHOW_IF);
 
 	if (!hdr){
 		return -EMSGSIZE;
@@ -319,7 +319,7 @@ static int storm_nl_send_if(struct sk_buff *skb, u32 portid, u32 seq,
 
 	s_info = sc_dev->s_info;
 
-	if (nla_put(skb, STORM_ATTR_ENDPOINT, sizeof(storm_info), &s_info)){
+	if (nla_put(skb,STORM_ATTR_IF, sizeof(s_info), &s_info)){
 		goto nla_put_failure;
 	}
 
@@ -335,7 +335,7 @@ nla_put_failure:
 static int storm_nl_show_if(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int ret, idx, cnt;
-	struct storm_net *storm = net_generic(sock_net(skb->sk), graft_net_id);
+	struct storm_net *storm = net_generic(sock_net(skb->sk),storm_net_id);
 	struct storm_control_dev *sc_dev;
 
 	cnt = 0;
@@ -346,7 +346,7 @@ static int storm_nl_show_if(struct sk_buff *skb, struct netlink_callback *cb)
 			cnt ++;
 			continue;
 		}
-		ret = graft_nl_send_ep(skb, NETLINK_CB(cb->skb).portid,
+		ret = storm_nl_send_if(skb, NETLINK_CB(cb->skb).portid,
 				       cb->nlh->nlmsg_seq, NLM_F_MULTI,*sc_dev);
 		if (ret < 0){
 			return ret;

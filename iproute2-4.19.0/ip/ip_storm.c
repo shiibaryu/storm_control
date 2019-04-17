@@ -168,26 +168,26 @@ static void print_if(struct storm_info *s_info)
 {
 	if(s_info->traffic_type & TRAFFIC_TYPE_BROADCAST){
 		if(s_info->pb_type & PPS){
-			print_if("%s broadcast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s broadcast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 		else if(s_info->pb_type & BPS){
-			print_if("%s broadcast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s broadcast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 	}
 	else if(s_info->traffic_type & TRAFFIC_TYPE_MULTICAST){
 		if(s_info->pb_type & PPS){
-			print_if("%s multicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s multicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 		else if(s_info->pb_type & BPS){
-			print_if("%s multicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s multicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 	}
 	else if(s_info->traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		if(s_info->pb_type & PPS){
-			print_if("%s unknown_unicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s unknown_unicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 		else if(s_info->pb_type & BPS){
-			print_if("%s unknown_unicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
+			printf("%s unknown_unicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 	}
 }
@@ -211,7 +211,7 @@ static int storm_show(const struct sockaddr_nl *who,struct nlmsghdr *n,void *arg
 	parse_rtattr(attrs, STORM_ATTR_MAX,
 		     (void *)ghdr + GENL_HDRLEN, len);
 
-	if (!attrs[STORM_ATTR_ENDPOINT]) {
+	if (!attrs[STORM_ATTR_IF]) {
 		fprintf(stderr, "%s: endpoint not found in the nlmsg\n",
 			__func__);
 		return -EBADMSG;
