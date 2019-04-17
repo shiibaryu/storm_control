@@ -217,7 +217,7 @@ static int storm_show(const struct sockaddr_nl *who,struct nlmsghdr *n,void *arg
 		return -EBADMSG;
 	}
 
-	memcpy(&s_info, RTA_DATA(attrs[STORM_ATTR_ENDPOINT]),
+	memcpy(&s_info, RTA_DATA(attrs[STORM_ATTR_IF]),
 	       sizeof(s_info));
 
 	print_if(&s_info);

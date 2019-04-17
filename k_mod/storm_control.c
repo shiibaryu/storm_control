@@ -347,7 +347,7 @@ static int storm_nl_show_if(struct sk_buff *skb, struct netlink_callback *cb)
 			continue;
 		}
 		ret = storm_nl_send_if(skb, NETLINK_CB(cb->skb).portid,
-				       cb->nlh->nlmsg_seq, NLM_F_MULTI,*sc_dev);
+				       cb->nlh->nlmsg_seq, NLM_F_MULTI,sc_dev);
 		if (ret < 0){
 			return ret;
 		}
