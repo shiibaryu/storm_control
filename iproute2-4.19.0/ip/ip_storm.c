@@ -54,7 +54,6 @@ void usage(void)
 
 static int parse_args(int argc,char **argv,struct storm_info *s_info)
 {
-	/* ip storm add dev ens33 type broadcast pps 14000*/
 
 	memset(s_info,0,sizeof(struct storm_info));
 	
@@ -261,7 +260,7 @@ int do_ipstorm(int argc, char **argv){
 		matches(*argv,"delete") == 0){
 			return do_del(argc - 1 , argv + 1);
 	}
-	if(matches(*argv,"show")==0){
+	if(matches(*argv,"show") == 0){
 		return do_show(argc - 1,argv + 1);
 	}
 
