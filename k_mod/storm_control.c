@@ -28,7 +28,7 @@
 #include <net/netns/generic.h>
 #include <net/route.h>
 
-#include <storm.h>
+#include "storm.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
@@ -45,6 +45,7 @@ MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 
 /* per netnamespace parameters*/
 static unsigned int storm_net_id;
+static int descriptor;
 
 struct storm_net{
 	struct net *net;
@@ -65,8 +66,11 @@ struct storm_control_dev{
 	unsigned int bps_checker;
 };
 
-static struct timer_list sc_timer;
-static int descriptor = 0;
+struct timer_data{
+	struct timer_list timer;
+	int timer_descriptor;
+};
+static struct timer_data sc_timer;
 
 /*mutext for checking per_cpu variable*/
 static DEFINE_MUTEX(cpu_mutex);
@@ -130,6 +134,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 
 	sc_dev->if_descriptor = descriptor;
 	descriptor += 1;
+
 
 	if(sc_dev->s_info.pb_type & PPS){
 		sc_dev->pps = alloc_percpu(int);
@@ -415,7 +420,7 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 		sc_dev->s_info.drop_flag = FLAG_UP;
 		sc_dev->pps_checker = 0;
 		initialize_pps_counter(sc_dev->pps);
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
+		mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->s_info.if_name);
@@ -430,7 +435,7 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
     else if(sc_dev->pps_checker >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
 		sc_dev->pps_checker = 0;
 	    	initialize_pps_counter(sc_dev->pps);
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
+		mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Packet per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->s_info.if_name);
     	}
@@ -449,7 +454,7 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 		sc_dev->s_info.drop_flag = FLAG_UP;
 		sc_dev->bps_checker = 0;
 		initialize_bps_counter(sc_dev->bps);
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
+		mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "--------Blocking started at %s.--------\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Packet was dropped at %s.\n",sc_dev->s_info.if_name);
@@ -464,7 +469,7 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
     else if(sc_dev->bps_checker * 8 >= sc_dev->s_info.threshold && (sc_dev->s_info.drop_flag & FLAG_UP)){
 		sc_dev->bps_checker = 0;
 	    	initialize_bps_counter(sc_dev->bps);
-		mod_timer(&sc_timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
+		mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
 	    	printk(KERN_INFO "Bit per second was more than the threthold at %s.\n",sc_dev->s_info.if_name);
 	    	printk(KERN_INFO "Dropping packet continues at %s.\n",sc_dev->s_info.if_name);
     	}
@@ -478,28 +483,29 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
     	}
 }
 
-static void check_packet(unsigned long data)
+static void check_packet(struct timer_list *t)
 {
 	struct storm_control_dev *sc_dev;
 	struct net *net;
-	struct storm_net *storm;
+        struct storm_net *storm;
+	struct timer_data *sc_timer = from_timer(sc_timer,t,timer);
 
-	net = get_net(&init_net);
-	storm = net_generic(net,storm_net_id);
+ 	net = get_net(&init_net);
+        storm = net_generic(net,storm_net_id);
 
-	list_for_each_entry(sc_dev,&storm->if_list,list){
-		if(sc_dev->if_descriptor == (int)data){
-			printk(KERN_INFO "--------One Second passed--------\n");
-			if(sc_dev->s_info.pb_type & PPS){
-				sc_dev->pps_checker = pps_total_cpu_packet(sc_dev->pps);
-    				pps_threshold_check(sc_dev);
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				sc_dev->bps_checker = bps_total_cpu_bit(sc_dev->bps);
-    				bps_threshold_check(sc_dev);
-			}
-		}
-	}
+        list_for_each_entry(sc_dev,&storm->if_list,list){
+		if(sc_timer->timer_descriptor == sc_dev->if_descriptor){
+		 	printk(KERN_INFO "--------One Second passed--------\n");
+                	if(sc_dev->s_info.pb_type & PPS){
+                        	sc_dev->pps_checker = pps_total_cpu_packet(sc_dev->pps);
+                        	pps_threshold_check(sc_dev);
+                	}
+                	else if(sc_dev->s_info.pb_type & BPS){
+                        	sc_dev->bps_checker = bps_total_cpu_bit(sc_dev->bps);
+                        	bps_threshold_check(sc_dev);
+                	}
+       		}
+ 	}
 }
 
 static int route4_input(struct sk_buff *skb)
@@ -547,11 +553,10 @@ storm_hook(
 					sc_dev->s_info.first_flag = FLAG_DOWN;
 					printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
 					printk(KERN_INFO "One second timer started.\n");
-
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
+					
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.timer_descriptor = sc_dev->if_descriptor;
+					add_timer(&sc_timer.timer);
 
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
@@ -601,10 +606,9 @@ storm_hook(
 					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");
 
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+                                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
+                                        add_timer(&sc_timer.timer);
 
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
@@ -654,11 +658,10 @@ storm_hook(
 					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");
 
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
-					
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+                                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
+                                        add_timer(&sc_timer.timer);
+	
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
 						return NF_ACCEPT;
@@ -721,14 +724,13 @@ static int
 __init stctl_init_module(void)
 {       
         int ret;
-
-	init_timer(&sc_timer); 
+       	
+	timer_setup(&sc_timer.timer,check_packet,0);
 
 	ret = register_pernet_subsys(&storm_net_ops);
 	if(ret){
-		goto netns_failed;
+		return ret;
 	}
-
 	ret = nf_register_net_hook(&init_net,&nf_ops_storm);
         if(ret){
                 printk(KERN_INFO "failed to register hook.\n");
@@ -751,8 +753,6 @@ genl_register_failed:
 register_hook_failed:
 	unregister_pernet_subsys(&storm_net_ops);
 
-netns_failed:
-	del_timer(&sc_timer);
 
         return ret;
 }
@@ -765,7 +765,7 @@ __exit stctl_exit_module(void)
 	genl_unregister_family(&storm_nl_family);
 	nf_unregister_net_hook(&init_net,&nf_ops_storm);
 	unregister_pernet_subsys(&storm_net_ops);
-	del_timer(&sc_timer);
+	del_timer(&sc_timer.timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
 }
 module_exit(stctl_exit_module);

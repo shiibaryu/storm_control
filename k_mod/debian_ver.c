@@ -729,7 +729,7 @@ __init stctl_init_module(void)
 		goto netns_failed;
 	}
 
-	ret = nf_register_net_hook(&init_net,&nf_ops_storm);
+	ret = nf_register_hook(&init_net,&nf_ops_storm);
         if(ret){
                 printk(KERN_INFO "failed to register hook.\n");
 		goto register_hook_failed;
