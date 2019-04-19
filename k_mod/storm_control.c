@@ -28,7 +28,7 @@
 #include <net/netns/generic.h>
 #include <net/route.h>
 
-#include "storm.h"
+#include <storm.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
@@ -74,202 +74,6 @@ static DEFINE_MUTEX(cpu_mutex);
 /* a prototype for ip_route_input */
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
-				 
-static void check_packet(unsigned long data);
-
-/*the function hooked incoming packet*/
-unsigned int
-storm_hook(
-	void *priv,
-        struct sk_buff *skb,
-        const struct nf_hook_state *state)
-{       
-	struct storm_control_dev *sc_dev;
-	struct net *net;
-	struct storm_net *storm;
-	if(!skb){
-            return NF_ACCEPT;
-        }
-
-	net = get_net(&init_net);
-	storm = net_generic(net,storm_net_id);
-
-	list_for_each_entry(sc_dev,&storm->if_list,list){
-		if(skb->dev == sc_dev->dev){
-	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
-	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-					sc_dev->s_info.first_flag = FLAG_DOWN;
-					printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
-					printk(KERN_INFO "One second timer started.\n");
-
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
-
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-	    			}
-				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-				}
-				else if(sc_dev->s_info.drop_flag & FLAG_UP){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_DROP;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_DROP;
-					}
-					else{
-						return NF_DROP;
-					}
-				}
-				else{
-					return NF_ACCEPT;
-				}
-			}
-	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
-	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-					sc_dev->s_info.first_flag = FLAG_DOWN;
-					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
-					printk(KERN_INFO "--------One second timer started--------\n");
-
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
-
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-	    			}
-				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-				}
-				else if(sc_dev->s_info.drop_flag & FLAG_UP){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_DROP;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_DROP;
-					}
-					else{
-						return NF_DROP;
-					}
-				}
-				else{
-						return NF_ACCEPT;
-				}
-			}
-			else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
-				if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-					sc_dev->s_info.first_flag = FLAG_DOWN;
-					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
-					printk(KERN_INFO "--------One second timer started--------\n");
-
-					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
-					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
-					sc_timer.function = check_packet;
-					add_timer(&sc_timer);
-					
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-	    			}
-				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_ACCEPT;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_ACCEPT;
-					}
-					else{
-						return NF_ACCEPT;
-					}
-				}
-				else if(sc_dev->s_info.drop_flag & FLAG_UP){
-					if(sc_dev->s_info.pb_type & PPS){
-						this_cpu_inc(*sc_dev->pps);
-						return NF_DROP;
-					}
-					else if(sc_dev->s_info.pb_type & BPS){
-						this_cpu_add(*sc_dev->bps,skb->len);
-						return NF_DROP;
-					}
-					else{
-						return NF_DROP;
-					}
-				}
-				else{
-					return NF_ACCEPT;
-				}
-			}
-			else{
-				return NF_ACCEPT;
-			}
-		}
-	}
-
-	return NF_ACCEPT;
-}
-
-static struct nf_hook_ops nf_ops_storm = {
-	.hook = storm_hook,
-	.hooknum = NF_INET_PRE_ROUTING,
-        .pf = NFPROTO_IPV4,
-    	.priority = NF_IP_PRI_FIRST,
-};
 
 static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
 {
@@ -719,7 +523,199 @@ static int route4_input(struct sk_buff *skb)
 	return 0;
 }
 
+/*the function hooked incoming packet*/
+unsigned int
+storm_hook(
+	void *priv,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
+{       
+	struct storm_control_dev *sc_dev;
+	struct net *net;
+	struct storm_net *storm;
+	if(!skb){
+            return NF_ACCEPT;
+        }
 
+	net = get_net(&init_net);
+	storm = net_generic(net,storm_net_id);
+
+	list_for_each_entry(sc_dev,&storm->if_list,list){
+		if(skb->dev == sc_dev->dev){
+	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
+	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
+					printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
+					printk(KERN_INFO "One second timer started.\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
+					sc_timer.function = check_packet;
+					add_timer(&sc_timer);
+
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+					return NF_ACCEPT;
+				}
+			}
+	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
+	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
+					printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
+					printk(KERN_INFO "--------One second timer started--------\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
+					sc_timer.function = check_packet;
+					add_timer(&sc_timer);
+
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+						return NF_ACCEPT;
+				}
+			}
+			else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+				if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
+					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
+					printk(KERN_INFO "--------One second timer started--------\n");
+
+					sc_timer.expires = jiffies + TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.data = (unsigned long)sc_dev->if_descriptor;
+					sc_timer.function = check_packet;
+					add_timer(&sc_timer);
+					
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+					return NF_ACCEPT;
+				}
+			}
+			else{
+				return NF_ACCEPT;
+			}
+		}
+	}
+
+	return NF_ACCEPT;
+}
+
+static struct nf_hook_ops nf_ops_storm = {
+	.hook = storm_hook,
+	.hooknum = NF_INET_PRE_ROUTING,
+        .pf = NFPROTO_IPV4,
+    	.priority = NF_IP_PRI_FIRST,
+};
     
 static int 
 __init stctl_init_module(void)
