@@ -2,7 +2,7 @@
 This is a linux kernel module to prevent BUM storm in layer 2 network. <br>
 
 By using this module, you can limit a specific traffic at the interface you specified.  <br>
-This module prevent your network from BUM taffic loop if you use somelinux distribution as a switch.
+This module prevent your network from BUM taffic loop if you use some linux distribution as a switch.
 
 <img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm_struct-1.png" width=660px>
 
