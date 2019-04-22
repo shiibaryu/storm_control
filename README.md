@@ -21,7 +21,7 @@ We tested this module on
 ```shell-session
 $ sudo apt install flex bison # for iproute2
 
-$ git clone https://github.com/siiba/storm_control.git
+$ git clone https://github.com/shiibaryu/storm_control.git
 $ cd storm_control
 $ make
 ```
