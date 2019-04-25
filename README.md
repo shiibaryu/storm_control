@@ -23,7 +23,7 @@ $ sudo apt install flex bison # for iproute2
 
 $ git clone https://github.com/shiibaryu/storm_control.git
 $ cd storm_control
-$ make
+$ make # compile object file for ubuntu version as is.
 ```
 In addition to the kernel module and tools, a modified iproute2 will
 be compiled.<br>
