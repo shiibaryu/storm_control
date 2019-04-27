@@ -4,7 +4,7 @@ By using this module, you can limit a specific traffic at the interface you spec
 
 <img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm_struct-1.png" width=660px>
 
-Fig 1. The packet inspection flow: This module utilise the kernel api "netfilter " to check packets. <br>
+Fig 1. The packet inspection flow: This module utilize the kernel api "netfilter " to check packets. <br>
 
 When a packet come in the interface you specified, <br>
 this module use netfilter to check a packet type and mesure a traffic amount following the setting. <br>
