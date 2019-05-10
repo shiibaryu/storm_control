@@ -584,16 +584,13 @@ storm_hook(
 				else if(sc_dev->s_info.drop_flag & FLAG_UP){
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
-						printk("drop1");
 						return NF_DROP;
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
-						printk("drop2");
 						return NF_DROP;
 					}
 					else{
-						printk("drop3");
 						return NF_DROP;
 					}
 				}
@@ -639,16 +636,13 @@ storm_hook(
 				else if(sc_dev->s_info.drop_flag & FLAG_UP){
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
-						printk("drop4");
 						return NF_DROP;
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
-						printk("drop5")
 						return NF_DROP;
 					}
 					else{
-						printk("drop6")
 						return NF_DROP;
 					}
 				}
@@ -694,16 +688,13 @@ storm_hook(
 				else if(sc_dev->s_info.drop_flag & FLAG_UP){
 					if(sc_dev->s_info.pb_type & PPS){
 						this_cpu_inc(*sc_dev->pps);
-						printk("drop7")
 						return NF_DROP;
 					}
 					else if(sc_dev->s_info.pb_type & BPS){
 						this_cpu_add(*sc_dev->bps,skb->len);
-						printk("drop8")
 						return NF_DROP;
 					}
 					else{
-						printk("drop9")
 						return NF_DROP;
 					}
 				}
