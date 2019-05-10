@@ -1,12 +1,10 @@
 # Storm Control for Linux
 This is a linux kernel module to prevent BUM storm in layer 2 network. <br>
-
 By using this module, you can limit a specific traffic at the interface you specified.  <br>
-This module prevent your network from BUM taffic loop if you use some linux distribution as a switch.
 
-<img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm_struct-1.png" width=660px>
+<img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm.png" width=450px>
 
-Fig 1. The packet inspection flow: This module utilise the kernel api "netfilter " to check packets. <br>
+Fig 1. The packet inspection flow: This module utilize the kernel api "netfilter " to check packets. <br>
 
 When a packet come in the interface you specified, <br>
 this module use netfilter to check a packet type and mesure a traffic amount following the setting. <br>
@@ -23,7 +21,7 @@ $ sudo apt install flex bison # for iproute2
 
 $ git clone https://github.com/shiibaryu/storm_control.git
 $ cd storm_control
-$ make
+$ make # compile a object file for ubuntu version as is.
 ```
 In addition to the kernel module and tools, a modified iproute2 will
 be compiled.<br>
