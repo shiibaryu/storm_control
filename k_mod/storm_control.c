@@ -34,7 +34,7 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
 
-#define TRAFFIC_TYPE_UNKNOWN_UNICAST    0x0001
+#define TRAFFIC_TYPE_UNICAST    		0x0001
 #define TRAFFIC_TYPE_BROADCAST          0x0002
 #define TRAFFIC_TYPE_MULTICAST          0x0004
 #define FLAG_UP				0x0001
@@ -125,7 +125,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
         else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST){
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNICAST){
 		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
         else{
@@ -508,7 +508,7 @@ static void check_packet(struct timer_list *t)
  	}
 }
 
-static int route4_input(struct sk_buff *skb)
+/*static int route4_input(struct sk_buff *skb)
 {
 	struct iphdr *hdr;
 	int err;
@@ -525,7 +525,7 @@ static int route4_input(struct sk_buff *skb)
 	}
 
 	return 0;
-}
+}*/
 
 /*the function hooked incoming packet*/
 unsigned int
@@ -650,7 +650,7 @@ storm_hook(
 					return NF_ACCEPT;
 				}
 			}
-			else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+			else if(skb->pkt_type == PACKET_UNICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNICAST)){
 				if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 					sc_dev->s_info.first_flag = FLAG_DOWN;
 					printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
