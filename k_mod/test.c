@@ -169,7 +169,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 
         ret = netdev_rx_handler_register(sc_dev->dev,sc_rx_handler,sc_dev);
         if(ret < 0){
-                printf(KERN_INFO "failed to register netdev_rx_handler.\n");
+                printk(KERN_INFO "failed to register netdev_rx_handler.\n");
         }
         
 	return 0;
@@ -730,9 +730,6 @@ __init stctl_init_module(void)
 	return ret;
 
 genl_register_failed:
-	nf_unregister_net_hook(&init_net,&nf_ops_storm);
-
-register_hook_failed:
 	unregister_pernet_subsys(&storm_net_ops);
 
 
