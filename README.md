@@ -2,7 +2,7 @@
 This is a linux kernel module to prevent BUM storm in layer 2 network. <br>
 By using this module, you can limit a specific traffic at the interface you specified.  <br>
 
-<img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm.png" width=450px>
+//<img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm.png" width=450px>
 
 Fig 1. The packet inspection flow: This module utilize the kernel api "netfilter " to check packets. <br>
 
