@@ -2,19 +2,15 @@
 This is a linux kernel module to prevent BUM storm in layer 2 network. <br>
 By using this module, you can limit a specific traffic at the interface you specified.  <br>
 
-//<img src="https://github.com/shiibaryu/storm_control/blob/master/pic/storm.png" width=450px>
-
-Fig 1. The packet inspection flow: This module utilize the kernel api "netfilter " to check packets. <br>
-
 When a packet come in the interface you specified, <br>
-this module use netfilter to check a packet type and mesure a traffic amount following the setting. <br>
+this module use netdev_rx_handler to check a packet type and mesure a traffic amount following the setting. <br>
 Then, by one minute, this module check whethere tha traffic amount are more than the threshold or not. <br>
 If the blocking started, the traffic amount is checked based on the low threshold.
 
 ## Compile
 We tested this module on
 - Ubuntu 18.04, kernel 4.15.0-43-generic
-- Debian9.8.0, kernel 4.9.0.8
+- Debian9.8.0, kernel 4.9.0.8 (storm_control_debian.c)
 
 ```shell-session
 $ sudo apt install flex bison # for iproute2
@@ -33,7 +29,7 @@ If some compilation in this iproute2 files may be failed, you don't neet to mind
 $ cd storm_control
 $ sudo make install
 $ cd k_mod
-$ insmod storm_control.ko
+$ insmod test.ko
 ```
 The modified iproute2 contained in this repository can configure 
 the setting using ip command.
