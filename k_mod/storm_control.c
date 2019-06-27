@@ -125,7 +125,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
         else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST){
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNICAST){
+	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
         else{
