@@ -79,6 +79,8 @@ static DEFINE_MUTEX(cpu_mutex);
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
 
+static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb);
+
 static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
 {
 	struct storm_control_dev *sc_dev;
@@ -126,7 +128,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
         else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST){
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNICAST){
+	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
 		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
         else{
@@ -135,7 +137,6 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 
 	sc_dev->if_descriptor = descriptor;
 	descriptor += 1;
-
 
 	if(sc_dev->s_info.pb_type & PPS){
 		sc_dev->pps = alloc_percpu(int);
@@ -166,7 +167,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 	else{
 		list_add_tail_rcu(&sc_dev->list,&storm->if_list);
 	}
-
+      printk(KERN_INFO "scandal baby!");
         ret = netdev_rx_handler_register(sc_dev->dev,sc_rx_handler,sc_dev);
         if(ret < 0){
                 printk(KERN_INFO "failed to register netdev_rx_handler.\n");
@@ -544,7 +545,7 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
             return NF_ACCEPT;
         }
         
-        if((skb->pkt_type == PACKET_BROADCAST) && (sc_dev->s_info.traffic_type & PACKET_TYPE_BROADCAST)){
+        if((skb->pkt_type == PACKET_BROADCAST) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
 	  	if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 		        sc_dev->s_info.first_flag = FLAG_DOWN;
 			/*printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
