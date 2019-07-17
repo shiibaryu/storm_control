@@ -79,8 +79,6 @@ static DEFINE_MUTEX(cpu_mutex);
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
 
-static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb);
-
 static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
 {
 	struct storm_control_dev *sc_dev;
@@ -96,8 +94,7 @@ static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev
 
 static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 {
-	int ret;
-        bool found = false;
+	bool found = false;
 	struct net *if_net;
 	struct storm_control_dev *sc_dev,*next;
 
@@ -138,6 +135,7 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 	sc_dev->if_descriptor = descriptor;
 	descriptor += 1;
 
+
 	if(sc_dev->s_info.pb_type & PPS){
 		sc_dev->pps = alloc_percpu(int);
 		if(!sc_dev->pps){
@@ -167,18 +165,12 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 	else{
 		list_add_tail_rcu(&sc_dev->list,&storm->if_list);
 	}
-      printk(KERN_INFO "scandal baby!");
-        ret = netdev_rx_handler_register(sc_dev->dev,sc_rx_handler,sc_dev);
-        if(ret < 0){
-                printk(KERN_INFO "failed to register netdev_rx_handler.\n");
-        }
-        
+
 	return 0;
 }
 static void storm_del_if(struct storm_control_dev *sc_dev)
 {
 	put_net(sc_dev->net);
-        netdev_rx_handler_unregister(sc_dev->dev);
 	dev_put(sc_dev->dev);
 	if(sc_dev->s_info.pb_type & PPS){
 		free_percpu(sc_dev->pps);
@@ -209,7 +201,6 @@ static __net_exit void storm_exit_net(struct net *net)
 	rcu_read_lock();
 
 	list_for_each_entry_safe(sc_dev,next,&storm->if_list,list){
-                netdev_rx_handler_unregister(sc_dev->dev);
 		storm_del_if(sc_dev);
 	}
 
@@ -537,176 +528,195 @@ static int route4_input(struct sk_buff *skb)
 }
 
 /*the function hooked incoming packet*/
-static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
+unsigned int
+storm_hook(
+	void *priv,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {       
-        struct sk_buff *skb = *pskb;
-	struct storm_control_dev *sc_dev = rcu_dereference(skb->dev->rx_handler_data);
+	struct storm_control_dev *sc_dev;
+	struct net *net;
+	struct storm_net *storm;
 	if(!skb){
             return NF_ACCEPT;
         }
-        
-        if((skb->pkt_type == PACKET_BROADCAST) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
-	  	if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-		        sc_dev->s_info.first_flag = FLAG_DOWN;
-			/*printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
-				printk(KERN_INFO "One second timer started.\n");*/
-					
-			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
-			sc_timer.timer_descriptor = sc_dev->if_descriptor;
-			add_timer(&sc_timer.timer);
 
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
+	net = get_net(&init_net);
+	storm = net_generic(net,storm_net_id);
+
+	list_for_each_entry(sc_dev,&storm->if_list,list){
+		if(skb->dev == sc_dev->dev){
+	    		if(skb->pkt_type == PACKET_BROADCAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
+	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
+					/*printk(KERN_INFO "First broadcast packet was arrived at %s.\n",sc_dev->s_info.if_name);
+					printk(KERN_INFO "One second timer started.\n");*/
+					
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+					sc_timer.timer_descriptor = sc_dev->if_descriptor;
+					add_timer(&sc_timer.timer);
+
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
 				}
-    		}
-		else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-			if(sc_dev->s_info.pb_type & PPS){
-        			this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
 				}
-		}
-       		else if(sc_dev->s_info.drop_flag & FLAG_UP){
-			if(sc_dev->s_info.pb_type & PPS){
-       				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_CONSUMED;
+				else{
+					return NF_ACCEPT;
+				}
 			}
-			else if(sc_dev->s_info.pb_type & BPS){
-       				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_CONSUMED;
-			}
-			else{
-				return RX_HANDLER_CONSUMED;
-			}
-		}
-		else{
-				return RX_HANDLER_PASS;
-			}
-		}
- 	else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
-        	if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-	        	sc_dev->s_info.first_flag = FLAG_DOWN;
+	    		else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
+	    			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
 					/*printk(KERN_INFO "First multicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
 					printk(KERN_INFO "--------One second timer started--------\n");*/
 
-			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
-                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
-                        add_timer(&sc_timer.timer);
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+                                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
+                                        add_timer(&sc_timer.timer);
 
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
-			}
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
 	    			}
-		else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+					return NF_ACCEPT;
+				}
 			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
-			}
-		}
-		else if(sc_dev->s_info.drop_flag & FLAG_UP){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_CONSUMED;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_CONSUMED;
-			}
-			else{
-				return RX_HANDLER_CONSUMED;
-			}
-		}
-		else{
-			return RX_HANDLER_PASS;
-		}
-        }
-	else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
-		if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-	        	sc_dev->s_info.first_flag = FLAG_DOWN;
-			/*printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
-			printk(KERN_INFO "--------One second timer started--------\n");*/
+			else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+				if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+					sc_dev->s_info.first_flag = FLAG_DOWN;
+					/*printk(KERN_INFO "First unknown_unicast packet was arrived at %s.\n",sc_dev->s_info.if_name);
+					printk(KERN_INFO "--------One second timer started--------\n");*/
 
-			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
-                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
-                        add_timer(&sc_timer.timer);
+					sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+                                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
+                                        add_timer(&sc_timer.timer);
 	
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+	    			}
+				else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_ACCEPT;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_ACCEPT;
+					}
+					else{
+						return NF_ACCEPT;
+					}
+				}
+				else if(sc_dev->s_info.drop_flag & FLAG_UP){
+					if(sc_dev->s_info.pb_type & PPS){
+						this_cpu_inc(*sc_dev->pps);
+						return NF_DROP;
+					}
+					else if(sc_dev->s_info.pb_type & BPS){
+						this_cpu_add(*sc_dev->bps,skb->len);
+						return NF_DROP;
+					}
+					else{
+						return NF_DROP;
+					}
+				}
+				else{
+					return NF_ACCEPT;
+				}
 			}
 			else{
-				return RX_HANDLER_PASS;
-			}
- 		}
-		else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
+				return NF_ACCEPT;
 			}
 		}
-		else if(sc_dev->s_info.drop_flag & FLAG_UP){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_CONSUMED;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_CONSUMED;
-			}
-			else{
-				return RX_HANDLER_CONSUMED;
-			}
-		}
-		else{
-			return RX_HANDLER_PASS;
-		}
-	}
-	else{
-		return RX_HANDLER_PASS;
 	}
 
-	return RX_HANDLER_PASS;
+	return NF_ACCEPT;
 }
+
+static struct nf_hook_ops nf_ops_storm = {
+	.hook = storm_hook,
+	.hooknum = NF_INET_PRE_ROUTING,
+        .pf = NFPROTO_IPV4,
+    	.priority = NF_IP_PRI_FIRST,
+};
     
 static int 
 __init stctl_init_module(void)
@@ -719,6 +729,11 @@ __init stctl_init_module(void)
 	if(ret){
 		return ret;
 	}
+	ret = nf_register_net_hook(&init_net,&nf_ops_storm);
+        if(ret){
+                printk(KERN_INFO "failed to register hook.\n");
+		goto register_hook_failed;
+        }
 
 	ret = genl_register_family(&storm_nl_family);
 	if(ret){
@@ -731,6 +746,9 @@ __init stctl_init_module(void)
 	return ret;
 
 genl_register_failed:
+	nf_unregister_net_hook(&init_net,&nf_ops_storm);
+
+register_hook_failed:
 	unregister_pernet_subsys(&storm_net_ops);
 
 
@@ -743,6 +761,7 @@ static void
 __exit stctl_exit_module(void)
 {	
 	genl_unregister_family(&storm_nl_family);
+	nf_unregister_net_hook(&init_net,&nf_ops_storm);
 	unregister_pernet_subsys(&storm_net_ops);
 	del_timer(&sc_timer.timer);
     	printk(KERN_INFO "Storm control module was Removed.\n");
