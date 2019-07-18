@@ -442,7 +442,6 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 			sc_dev->s_info.drop_flag = FLAG_UP;
 			sc_dev->pps_checker = 0;
 			initialize_pps_counter(sc_dev->pps);
-			thresh_flag = LOWER_FLAG;
 			mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
     		}else{
 	    		sc_dev->s_info.first_flag = FLAG_UP;
@@ -470,7 +469,6 @@ static void bps_threshold_check(struct storm_control_dev *sc_dev){
 			sc_dev->s_info.drop_flag = FLAG_UP;
 			sc_dev->pps_checker = 0;
 			initialize_pps_counter(sc_dev->pps);
-			thresh_flag = LOWER_FLAG;
 			mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
     		}else{
 	    		sc_dev->s_info.first_flag = FLAG_UP;
