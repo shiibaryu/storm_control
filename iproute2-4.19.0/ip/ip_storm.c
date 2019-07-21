@@ -71,17 +71,17 @@ static int parse_args(int argc,char **argv,struct storm_info *s_info)
 			argc--;
 			argv++;
 			if(strcmp(*argv,"multicast") == 0){
-				s_info->traffic_type = TRAFFIC_TYPE_MULTICAST;
+				s_info->traffic_type |= TRAFFIC_TYPE_MULTICAST;
 				s_info->first_flag = FLAG_UP;
 				s_info->drop_flag = FLAG_DOWN;
 			}
 			else if(strcmp(*argv,"broadcast") == 0){
-				s_info->traffic_type = TRAFFIC_TYPE_BROADCAST;
+				s_info->traffic_type |= TRAFFIC_TYPE_BROADCAST;
 				s_info->first_flag = FLAG_UP;
 				s_info->drop_flag = FLAG_DOWN;
 			}		
 			else if(strcmp(*argv,"unknown_unicast") == 0){
-				s_info->traffic_type = TRAFFIC_TYPE_UNKNOWN_UNICAST;
+				s_info->traffic_type |= TRAFFIC_TYPE_UNKNOWN_UNICAST;
 				s_info->first_flag = FLAG_UP;
 				s_info->drop_flag = FLAG_DOWN;
 			}
@@ -165,7 +165,9 @@ static int do_del(int argc, char **argv)
 
 static void print_if(struct storm_info *s_info)
 {
-	if(s_info->traffic_type & TRAFFIC_TYPE_BROADCAST){
+	unsigned short res=0;
+
+	if((res = (s_info->traffic_type >> 1)) & 1){
 		if(s_info->pb_type & PPS){
 			printf("%s broadcast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
@@ -173,7 +175,7 @@ static void print_if(struct storm_info *s_info)
 			printf("%s broadcast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 	}
-	else if(s_info->traffic_type & TRAFFIC_TYPE_MULTICAST){
+	if((res = (s_info->traffic_type >> 2)) & 1){
 		if(s_info->pb_type & PPS){
 			printf("%s multicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
@@ -181,7 +183,7 @@ static void print_if(struct storm_info *s_info)
 			printf("%s multicast bps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}
 	}
-	else if(s_info->traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	if((res = (s_info->traffic_type >> 0)) & 1){
 		if(s_info->pb_type & PPS){
 			printf("%s unknown_unicast pps %d %d\n",s_info->if_name,s_info->threshold,s_info->low_threshold);
 		}

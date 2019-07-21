@@ -122,18 +122,15 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 		return -1;
 	}
 
-	if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST){
+	if((res = (sc_dev->s_info.traffic_type >> 1)) & 1){
             	printk(KERN_INFO "Control target is broadcast.\n");
         }
-        else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST){
+        if((res = (sc_dev->s_info.traffic_type >> 2)) & 1){
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	else if(sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST){
+	if((res = (sc_dev->s_info.traffic_type >> 0)) & 1){
 		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
-        else{
-            printk(KERN_INFO "This traffic type could not be registered.\n");
-        }
 
 	sc_dev->if_descriptor = descriptor;
 	descriptor += 1;
@@ -159,15 +156,13 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 			break;
 		}
 	}
-
-
 	if(found){
 		__list_add_rcu(&sc_dev->list,next->list.prev,&next->list);
 	}
 	else{
 		list_add_tail_rcu(&sc_dev->list,&storm->if_list);
 	}
-      printk(KERN_INFO "scandal baby!");
+	
         ret = netdev_rx_handler_register(sc_dev->dev,sc_rx_handler,sc_dev);
         if(ret < 0){
                 printk(KERN_INFO "failed to register netdev_rx_handler.\n");
@@ -453,27 +448,27 @@ static void pps_threshold_check(struct storm_control_dev *sc_dev){
 
 static void bps_threshold_check(struct storm_control_dev *sc_dev){
 	if(sc_dev->s_info.drop_flag & FLAG_UP){	
-    		if(sc_dev->pps_checker >= sc_dev->s_info.low_threshold){
-			sc_dev->pps_checker = 0;
-	    		initialize_pps_counter(sc_dev->pps);
+    		if(sc_dev->bps_checker * 8 >= sc_dev->s_info.low_threshold){
+			sc_dev->bps_checker = 0;
+	    		initialize_bps_counter(sc_dev->bps);
 			mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
     		}
     		else{
 	    		sc_dev->s_info.first_flag = FLAG_UP;
 	    		sc_dev->s_info.drop_flag = FLAG_DOWN;
-			sc_dev->pps_checker = 0;
-			initialize_pps_counter(sc_dev->pps);
+			sc_dev->bps_checker = 0;
+			initialize_bps_counter(sc_dev->bps);
     		}
 	}else{
-		if(sc_dev->pps_checker >= sc_dev->s_info.threshold){
+		if(sc_dev->bps_checker * 8 >= sc_dev->s_info.threshold){
 			sc_dev->s_info.drop_flag = FLAG_UP;
-			sc_dev->pps_checker = 0;
-			initialize_pps_counter(sc_dev->pps);
+			sc_dev->bps_checker = 0;
+			initialize_bps_counter(sc_dev->bps);
 			mod_timer(&sc_timer.timer, jiffies + TIMER_TIMEOUT_SECS*HZ);
     		}else{
 	    		sc_dev->s_info.first_flag = FLAG_UP;
-			sc_dev->pps_checker = 0;
-			initialize_pps_counter(sc_dev->pps);
+			sc_dev->bps_checker = 0;
+			initialize_bps_counter(sc_dev->bps);
     		}	
 	}
 }
@@ -524,13 +519,14 @@ static int route4_input(struct sk_buff *skb)
 /*the function hooked incoming packet*/
 static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 {       
+	unsigned short res=0;
         struct sk_buff *skb = *pskb;
 	struct storm_control_dev *sc_dev = rcu_dereference(skb->dev->rx_handler_data);
 	if(!skb){
             return NF_ACCEPT;
         }
         
-        if((skb->pkt_type == PACKET_BROADCAST) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_BROADCAST)){
+        if((skb->pkt_type == PACKET_BROADCAST) && (res = (sc_dev->s_info.traffic_type >> 1)) & 1){
 	  	if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 		        sc_dev->s_info.first_flag = FLAG_DOWN;
 			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
@@ -579,7 +575,7 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 				return RX_HANDLER_PASS;
 			}
 		}
- 	else if(skb->pkt_type == PACKET_MULTICAST && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_MULTICAST)){
+ 	if(skb->pkt_type == PACKET_MULTICAST && (res = (sc_dev->s_info.traffic_type >> 2)) & 1){
         	if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	        	sc_dev->s_info.first_flag = FLAG_DOWN;
 			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
@@ -628,7 +624,7 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 			return RX_HANDLER_PASS;
 		}
         }
-	else if((route4_input(skb) == -1) && (sc_dev->s_info.traffic_type & TRAFFIC_TYPE_UNKNOWN_UNICAST)){
+	if((route4_input(skb) == -1) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
 		if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	        	sc_dev->s_info.first_flag = FLAG_DOWN;
 			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
