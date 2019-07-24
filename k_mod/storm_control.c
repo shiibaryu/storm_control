@@ -26,7 +26,7 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
-#include <linux/net/arp.h>
+#include <net/arp.h>
 
 
 #include "storm.h"
@@ -498,34 +498,26 @@ static void check_packet(struct timer_list *t)
  	}
 }
 
-static int route4_input(struct sk_buff *skb)
-{
-	struct iphdr *hdr;
-	int err;
+static int find_unknown_unicast(struct sk_buff *skb){
+	struct dst_entry *dst = skb_dst(skb);
+	struct net_device *dev  = dst->dev;
+	struct neighbour *n = NULL;
+	__be32 daddr;
 
-	if (!skb->dev) {
-		printk(KERN_INFO "skb lacks an incoming device.");
-		return -EINVAL;
+	if (!skb_dst(skb)) {
+       		pr_debug("arp_find is called with dst==NULL\n");    
+        	kfree_skb(skb);
+       		return 1;
+  	}
+	///paddr = rt_nexthop(skb_rtable(skb), ip_hdr(skb)->daddr);
+	daddr = ip_hdr(skb)->daddr;
+	n = __neigh_lookup(&arp_tbl,&daddr,dev,0);
+
+	if(n){
+		return 0;
 	}
-
-	hdr = ip_hdr(skb);
-	err = ip_route_input(skb, hdr->daddr, hdr->saddr, hdr->tos, skb->dev);
-	if(err){
-		return -1;
-	}
-
-	return 0;
+	return 1;
 }
-
-static int is_Unknown(struct sk_buff *skb){
-	int rec;
-	struct ethhdr *ethhdr;
-
-	ethhdr = eth_hdr(skb);
-
-	return rec = arp_find(ethhdr->h_source,skb);
-}
-
 /*the function hooked incoming packet*/
 static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 {       
@@ -635,7 +627,7 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 		}
         }
 	/* if((route4_input(skb) == -1) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){*/
-	if((is_Unknown(skb)) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
+	if((find_unknown_unicast(skb)) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
 		if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	        	sc_dev->s_info.first_flag = FLAG_DOWN;
 			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
