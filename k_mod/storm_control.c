@@ -19,7 +19,6 @@
 #include <linux/types.h>
 #include <linux/net_namespace.h>
 #include <linux/mutex.h>
-#include <linux/slab.h>
 #include <linux/percpu.h>
 #include <linux/ip.h>
 #include <linux/cpumask.h>
@@ -27,6 +26,8 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
+#include <linux/net/arp.h>
+
 
 #include "storm.h"
 
@@ -516,6 +517,15 @@ static int route4_input(struct sk_buff *skb)
 	return 0;
 }
 
+static int is_Unknown(struct sk_buff *skb){
+	int rec;
+	struct ethhdr *ethhdr;
+
+	ethhdr = eth_hdr(skb);
+
+	return rec = arp_find(ethhdr->h_source,skb);
+}
+
 /*the function hooked incoming packet*/
 static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 {       
@@ -624,7 +634,8 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 			return RX_HANDLER_PASS;
 		}
         }
-	if((route4_input(skb) == -1) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
+	/* if((route4_input(skb) == -1) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){*/
+	if((is_Unknown(skb)) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
 		if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
 	        	sc_dev->s_info.first_flag = FLAG_DOWN;
 			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
