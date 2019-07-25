@@ -123,13 +123,13 @@ static int storm_add_if(struct storm_net *storm,struct storm_info *s_info)
 		return -1;
 	}
 
-	if((res = (sc_dev->s_info.traffic_type >> 1)) & 1){
+	if((ret = (sc_dev->s_info.traffic_type >> 1)) & 1){
             	printk(KERN_INFO "Control target is broadcast.\n");
         }
-        if((res = (sc_dev->s_info.traffic_type >> 2)) & 1){
+        if((ret = (sc_dev->s_info.traffic_type >> 2)) & 1){
             	printk(KERN_INFO "Control target is multicast.\n");
         }
-	if((res = (sc_dev->s_info.traffic_type >> 0)) & 1){
+	if((ret = (sc_dev->s_info.traffic_type >> 0)) & 1){
 		printk(KERN_INFO "Control target is unknown_unicast.\n");
 	}
 
@@ -500,24 +500,17 @@ static void check_packet(struct timer_list *t)
 
 static int find_unknown_unicast(struct sk_buff *skb){
 	struct dst_entry *dst = skb_dst(skb);
-	struct net_device *dev  = dst->dev;
-	struct neighbour *n = NULL;
-	__be32 daddr;
+	struct net_device *dev = dst->dev;
+	struct net_bridge *br = netdev_priv(dev);
 
-	if (!skb_dst(skb)) {
-       		pr_debug("arp_find is called with dst==NULL\n");    
-        	kfree_skb(skb);
-       		return 1;
-  	}
-	///paddr = rt_nexthop(skb_rtable(skb), ip_hdr(skb)->daddr);
-	daddr = ip_hdr(skb)->daddr;
-	n = __neigh_lookup(&arp_tbl,&daddr,dev,0);
-
-	if(n){
+	if(br_find_fdb(br,br->dev->dev_addr,0)){
 		return 0;
 	}
-	return 1;
+	else{
+		return 1;
+	}
 }
+
 /*the function hooked incoming packet*/
 static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 {       
