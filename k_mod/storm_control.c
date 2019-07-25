@@ -6,28 +6,26 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/moduleparam.h>
 #include <linux/netdevice.h>
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
-#include <linux/netfilter_ipv6.h>
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/skbuff.h>
 #include <linux/ktime.h>
 #include <linux/if_packet.h>
+#include <linux/if_bridge.h>
+#include <linux/if_vlan.h>
 #include <linux/types.h>
 #include <linux/net_namespace.h>
 #include <linux/mutex.h>
 #include <linux/percpu.h>
 #include <linux/ip.h>
-#include <linux/cpumask.h>
 #include <linux/percpu-defs.h>
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
 
 #include "storm.h"
+#include "br_private.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
@@ -81,7 +79,7 @@ static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
 static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
 						const unsigned char *addr,
 						__u16 vid);
-						
+
 /* a prototype for ip_route_input */
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
@@ -508,7 +506,7 @@ static int find_unknown_unicast(struct sk_buff *skb){
 	struct dst_entry *dst = skb_dst(skb);
 	struct net_device *dev = dst->dev;
 	struct net_bridge *br = netdev_priv(dev);
-	unsigned char  dst_addr = rcu_dereference(br->dev->dev_addr);
+	unsigned char dst_addr = rcu_dereference(br->dev->dev_addr);
 
 	if(br_fdb_find(br,dst_addr,0)){
 		return 0;
