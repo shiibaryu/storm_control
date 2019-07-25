@@ -25,7 +25,7 @@
 #include <net/route.h>
 #include <storm.h>
 
-#include "net/bridge/br_private.h"
+#include "storm_fdb.h"
 
 
 MODULE_LICENSE("GPL");
