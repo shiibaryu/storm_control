@@ -26,7 +26,6 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
-#include <net/bridge/br_fdb.h>
 
 #include "storm.h"
 
@@ -496,6 +495,21 @@ static void check_packet(struct timer_list *t)
        		}
  	}
 }
+
+static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
+						 const unsigned char *addr,
+						 __u16 vid)
+{
+	struct net_bridge_fdb_key key;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	key.vlan_id = vid;
+	memcpy(key.addr.addr, addr, sizeof(key.addr.addr));
+
+	return rhashtable_lookup(tbl, &key, br_fdb_rht_params);
+}
+
 static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
 						const unsigned char *addr,
 						__u16 vid)
@@ -516,7 +530,7 @@ static int find_unknown_unicast(struct sk_buff *skb){
 	struct net_device *dev = dst->dev;
 	struct net_bridge *br = netdev_priv(dev);
 
-	if(br_find_fdb(br,br->dev->dev_addr,0)){
+	if(br_fdb_find(br,br->dev->dev_addr,0)){
 		return 0;
 	}
 	else{
