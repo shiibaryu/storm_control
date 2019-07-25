@@ -2,9 +2,15 @@
 #
 # Makefile for the IEEE 802.1d ethernet bridging layer.
 #
+KERNELSRCDIR := /lib/modules/$(shell uname -r)/build 
+BUILD_DIR := $(shell pwd)
+VERBOSE := 0
 
 obj-$(CONFIG_BRIDGE) += bridge.o
 
+all:
+	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) V=$(VERBOSE) modules
+	
 bridge-y	:= br.o br_device.o br_fdb.o br_forward.o br_if.o br_input.o \
 			br_ioctl.o br_stp.o br_stp_bpdu.o \
 			br_stp_if.o br_stp_timer.o br_netlink.o \

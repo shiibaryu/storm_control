@@ -23,9 +23,10 @@
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
-#include <br_private.h>
+#include <storm.h>
 
-#include "storm.h"
+#include "net/bridge/br_private.h"
+
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
@@ -498,7 +499,7 @@ static int find_unknown_unicast(struct sk_buff *skb){
 	struct dst_entry *dst = skb_dst(skb);
 	struct net_device *dev = dst->dev;
 	struct net_bridge *br = netdev_priv(dev);
-	unsigned char dst_addr = rcu_dereference(br->dev->dev_addr);
+	unsigned char *dst_addr = rcu_dereference(br->dev->dev_addr);
 
 	if(br_fdb_find_rcu(br,dst_addr,0)){
 		return 0;

@@ -1,4 +1,4 @@
-KERNELSRCDIR := /lib/modules/$(shell uname -r)/build
+KERNELSRCDIR := /lib/modules/$(shell uname -r)/build 
 BUILD_DIR := $(shell pwd)
 VERBOSE := 0
 
