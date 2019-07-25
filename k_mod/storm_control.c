@@ -74,6 +74,14 @@ static struct timer_data sc_timer;
 /*mutext for checking per_cpu variable*/
 static DEFINE_MUTEX(cpu_mutex);
 
+static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
+						 const unsigned char *addr,
+						 __u16 vid);
+			
+static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
+						const unsigned char *addr,
+						__u16 vid);
+						
 /* a prototype for ip_route_input */
 int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
 				 u8 tos, struct net_device *devin);
@@ -500,8 +508,9 @@ static int find_unknown_unicast(struct sk_buff *skb){
 	struct dst_entry *dst = skb_dst(skb);
 	struct net_device *dev = dst->dev;
 	struct net_bridge *br = netdev_priv(dev);
+	unsigned char  dst_addr = rcu_dereference(br->dev->dev_addr);
 
-	if(br_fdb_find(br,br->dev->dev_addr,0)){
+	if(br_fdb_find(br,dst_addr,0)){
 		return 0;
 	}
 	else{
