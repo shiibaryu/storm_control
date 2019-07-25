@@ -24,6 +24,15 @@ struct mac_addr {
 	unsigned char	addr[ETH_ALEN];
 };
 
+struct bridge_mcast_own_query {
+	struct timer_list	timer;
+	u32			startup_sent;
+};
+
+struct br_tunnel_info {
+	__be64			tunnel_id;
+	struct metadata_dst	*tunnel_dst;
+};
 struct net_bridge_vlan {
 	struct rhash_head		vnode;
 	struct rhash_head		tnode;
