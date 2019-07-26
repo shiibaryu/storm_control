@@ -73,10 +73,6 @@ static struct timer_data sc_timer;
 /*mutext for checking per_cpu variable*/
 static DEFINE_MUTEX(cpu_mutex);
 
-/* a prototype for ip_route_input */
-int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
-				 u8 tos, struct net_device *devin);
-
 static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb);
 
 static struct storm_control_dev *storm_find_if(struct storm_net *storm,char *dev)
