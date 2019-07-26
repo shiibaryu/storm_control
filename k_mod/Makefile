@@ -2,7 +2,7 @@ KERNELSRCDIR := /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(shell pwd)
 VERBOSE := 0
 
-obj-m := storm_control.o storm_fdb.o
+obj-m := storm_control.o 
 ccflags-y := -I$(src)/../include/
 
 all:

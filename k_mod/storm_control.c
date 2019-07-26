@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/rculist.h>
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/init.h>
@@ -16,10 +17,9 @@
 #include <linux/if_vlan.h>
 #include <linux/types.h>
 #include <linux/net_namespace.h>
+#include <linux/rhashtable.h>
 #include <linux/mutex.h>
 #include <linux/percpu.h>
-#include <linux/ip.h>
-#include <linux/percpu-defs.h>
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
 #include <net/route.h>
@@ -491,6 +491,50 @@ static void check_packet(struct timer_list *t)
  	}
 }
 
+static const struct rhashtable_params br_fdb_rht_params = {
+	.head_offset = offsetof(struct net_bridge_fdb_entry, rhnode),
+	.key_offset = offsetof(struct net_bridge_fdb_entry, key),
+	.key_len = sizeof(struct net_bridge_fdb_key),
+	.automatic_shrinking = true,
+	.locks_mul = 1,
+};
+
+static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
+						 const unsigned char *addr,
+						 __u16 vid)
+{
+	struct net_bridge_fdb_key key;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	key.vlan_id = vid;
+	memcpy(key.addr.addr, addr, sizeof(key.addr.addr));
+
+	return rhashtable_lookup(tbl, &key, br_fdb_rht_params);
+}
+
+static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
+						const unsigned char *addr,
+						__u16 vid)
+{
+	struct net_bridge_fdb_entry *fdb;
+
+	lockdep_assert_held_once(&br->hash_lock);
+
+	rcu_read_lock();
+	fdb = fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
+	rcu_read_unlock();
+
+	return fdb;
+}
+
+struct net_bridge_fdb_entry *br_fdb_find_rcu(struct net_bridge *br,
+					     const unsigned char *addr,
+					     __u16 vid)
+{
+	return fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
+}
+
 static int find_unknown_unicast(struct sk_buff *skb){
 	struct dst_entry *dst = skb_dst(skb);
 	struct net_device *dev = dst->dev;
@@ -614,54 +658,58 @@ static rx_handler_result_t sc_rx_handler(struct sk_buff **pskb)
 		}
         }
 	/* if((route4_input(skb) == -1) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){*/
-	if((find_unknown_unicast(skb)) && (res = (sc_dev->s_info.traffic_type >> 0)) & 1){
-		if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
-	        	sc_dev->s_info.first_flag = FLAG_DOWN;
-			sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
-                        sc_timer.timer_descriptor = sc_dev->if_descriptor;
-                        add_timer(&sc_timer.timer);
+	if((res = (sc_dev->s_info.traffic_type >> 0)) & 1){
+		if(find_unknown_unicast(skb)) {
+			if((sc_dev->s_info.first_flag & FLAG_UP) && (sc_dev->s_info.drop_flag & FLAG_DOWN)){
+	        		sc_dev->s_info.first_flag = FLAG_DOWN;
+				sc_timer.timer.expires = TIMER_TIMEOUT_SECS*HZ;
+                        	sc_timer.timer_descriptor = sc_dev->if_descriptor;
+                        	add_timer(&sc_timer.timer);
 	
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
+				if(sc_dev->s_info.pb_type & PPS){
+					this_cpu_inc(*sc_dev->pps);
+					return RX_HANDLER_PASS;
+				}
+				else if(sc_dev->s_info.pb_type & BPS){
+					this_cpu_add(*sc_dev->bps,skb->len);
+					return RX_HANDLER_PASS;
+				}
+				else{
+				r	eturn RX_HANDLER_PASS;
+				}
+ 			}
+			else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
+				if(sc_dev->s_info.pb_type & PPS){
+					this_cpu_inc(*sc_dev->pps);
+					return RX_HANDLER_PASS;
+				}
+				else if(sc_dev->s_info.pb_type & BPS){
+					this_cpu_add(*sc_dev->bps,skb->len);
+					return RX_HANDLER_PASS;
+				}
+				else{
+					return RX_HANDLER_PASS;
+				}
 			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
-			}
-			else{
-				return RX_HANDLER_PASS;
-			}
- 		}
-		else if(sc_dev->s_info.drop_flag & FLAG_DOWN){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_PASS;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_PASS;
+			else if(sc_dev->s_info.drop_flag & FLAG_UP){
+				if(sc_dev->s_info.pb_type & PPS){
+					this_cpu_inc(*sc_dev->pps);
+					return RX_HANDLER_CONSUMED;
+				}
+				else if(sc_dev->s_info.pb_type & BPS){
+					this_cpu_add(*sc_dev->bps,skb->len);
+					return RX_HANDLER_CONSUMED;
+				}
+				else{
+					return RX_HANDLER_CONSUMED;
+				}
 			}
 			else{
 				return RX_HANDLER_PASS;
 			}
 		}
-		else if(sc_dev->s_info.drop_flag & FLAG_UP){
-			if(sc_dev->s_info.pb_type & PPS){
-				this_cpu_inc(*sc_dev->pps);
-				return RX_HANDLER_CONSUMED;
-			}
-			else if(sc_dev->s_info.pb_type & BPS){
-				this_cpu_add(*sc_dev->bps,skb->len);
-				return RX_HANDLER_CONSUMED;
-			}
-			else{
-				return RX_HANDLER_CONSUMED;
-			}
-		}
-		else{
-			return RX_HANDLER_PASS;
-		}
+		return RX_HANDLER_PASS;
+		
 	}
 	else{
 		return RX_HANDLER_PASS;
