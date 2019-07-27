@@ -392,11 +392,11 @@ struct br_input_skb_cb {
 };
 
 
-static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
+struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
 						 const unsigned char *addr,
 						 __u16 vid);
 
-static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
+struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
 						const unsigned char *addr,
 						__u16 vid);
 

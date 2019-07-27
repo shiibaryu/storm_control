@@ -18,7 +18,7 @@
 
 #include "storm_fdb.h"
 
-static const struct rhashtable_params br_fdb_rht_params = {
+struct rhashtable_params br_fdb_rht_params = {
 	.head_offset = offsetof(struct net_bridge_fdb_entry, rhnode),
 	.key_offset = offsetof(struct net_bridge_fdb_entry, key),
 	.key_len = sizeof(struct net_bridge_fdb_key),
@@ -26,7 +26,7 @@ static const struct rhashtable_params br_fdb_rht_params = {
 	.locks_mul = 1,
 };
 
-static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
+struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
 						 const unsigned char *addr,
 						 __u16 vid)
 {
@@ -40,7 +40,7 @@ static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
 	return rhashtable_lookup(tbl, &key, br_fdb_rht_params);
 }
 
-static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
+struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
 						const unsigned char *addr,
 						__u16 vid)
 {
@@ -62,3 +62,15 @@ struct net_bridge_fdb_entry *br_fdb_find_rcu(struct net_bridge *br,
 	return fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
 }
 
+static int __init fdb_start(void){
+	printk("br_fdb module are inserted.\n");
+	return 0;
+}
+module_init(fdb_start);
+
+static void __exit fdb_exit(void){
+	printk("br_fdb module are unloaded\n");
+}
+module_exit(fdb_exit);
+
+EXPORT_SYMBOL(br_fdb_find);
