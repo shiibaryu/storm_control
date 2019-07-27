@@ -25,9 +25,6 @@
 #include <net/route.h>
 #include <storm.h>
 
-#include "storm_fdb.h"
-
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("siibaa");
 MODULE_DESCRIPTION("This is a linux kernel module for strom control.");
@@ -496,7 +493,7 @@ static int find_unknown_unicast(struct sk_buff *skb){
 	struct net_device *dev = dst->dev;
 	struct net_bridge *br = netdev_priv(dev);
 
-	if(br_fdb_find_rcu(br,eth_hdr(skb)->h_dest,0)){
+	if(br_fdb_find_port(br,eth_hdr(skb)->h_dest,0)){
 		return 0;
 	}
 	else{
