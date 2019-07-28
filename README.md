@@ -39,7 +39,7 @@ $ ./iproute2-4.10.0/ip/ip storm help
 
 		"Usage: ip storm add dev NAME\n"
 		"          type { broadcast | multicast | unknown_unicast }\n"
-		"          { pps | bps} threshold low_threshold\n"
+		"          { pps | bps | level } threshold low_threshold\n"
 		"\n"
 		"       ip storm del dev NAME\n"
 		"\n"
