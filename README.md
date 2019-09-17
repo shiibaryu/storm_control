@@ -2,6 +2,8 @@
 This is a linux kernel module to prevent BUM storm in layer 2 network. <br>
 By using this module, you can limit a specific traffic at the interface you specified.  <br>
 
+The reason I implemented is there wasn't Storm control function in Linux. <br>
+
 When a packet come in the interface you specified, <br>
 this module use netdev_rx_handler to check a packet type and mesure a traffic amount following the setting. <br>
 Then, by one minute, this module check whethere tha traffic amount are more than the threshold or not. <br>
