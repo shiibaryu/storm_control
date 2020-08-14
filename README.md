@@ -39,14 +39,12 @@ the setting using ip command.
 ```shell-session
 $ ./iproute2-4.10.0/ip/ip storm help
 
-		"Usage: ip storm add dev NAME\n"
-		"          type { broadcast | multicast | unknown_unicast }\n"
-		"          { pps | bps | level } threshold low_threshold\n"
-		"\n"
-		"       ip storm del dev NAME\n"
-		"\n"
+		"Usage: ip storm add dev NAME"
+		"          type { broadcast | multicast | unknown_unicast }"
+		"          { pps | bps | level } threshold low_threshold"
+		"       ip storm del dev NAME"
 		"       ip storm show\n"
-		"\n"
+		"
 		);
     
 $ sudo /sbin/ip storm add dev ens0 type broadcast pps 1000 100
